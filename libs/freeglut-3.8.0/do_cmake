@@ -1,0 +1,4 @@
+#!/bin/bash
+
+#cmake . -DX11_X11_INCLUDE_PATH=/opt/X11/include -DX11_LIB_PATH=/opt/X11/lib
+cmake . -DFREEGLUT_COCOA=on
