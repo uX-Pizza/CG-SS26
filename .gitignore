@@ -71,5 +71,6 @@ Testing/
 # others
 .DS_Store*
 .vscode/
+*
 mainNonIndexed.cpp
 mainClean.cpp
