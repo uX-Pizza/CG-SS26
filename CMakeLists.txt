@@ -3,6 +3,7 @@ project (Blatt01)
 
 # list of source files to compile
 set(sources main.cpp GLSLProgram.cpp)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # find/include libraries
 find_package(OpenGL REQUIRED)

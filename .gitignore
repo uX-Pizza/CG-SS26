@@ -40,9 +40,10 @@
 *.app
 
 # Build directories
-build/
+build
 Build/
 build-*/
+!libs/glew-glew-2.3.1/build
 
 # CMake generated files
 CMakeFiles/
@@ -71,6 +72,6 @@ Testing/
 # others
 .DS_Store*
 .vscode/
-*
+bin/
 mainNonIndexed.cpp
 mainClean.cpp
