@@ -23,3 +23,5 @@
 auto/EGL-Registry
 auto/OpenGL-Registry
 auto/glfixes
+!Makefile
+!auto/Makefile
