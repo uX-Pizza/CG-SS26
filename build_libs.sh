@@ -2,12 +2,10 @@
 
 echo "cmake glew"
 
-cd ../glew-glew-2.3.1/build
-cmake ./cmake
-echo "make"
-make -j4
-echo "make install"
-sudo make install
+cd ../glew-glew-2.3.1/auto
+make all
+cd ..
+make
 
 echo "-------------------freeglut-------------------"
 
