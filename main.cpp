@@ -27,6 +27,11 @@ glm::mat4x4 projection;
 float zNear = 0.1f;
 float zFar  = 100.0f;
 
+float radius = 1.0f;
+int n = 0;
+const float rotationRate = 10.0f;
+glm::vec3 cumulativeRotations = glm::vec3(0.0f, 0.0f, 0.0f);
+
 /*
 Struct to hold data for object rendering.
 */
@@ -57,56 +62,68 @@ public:
   glm::mat4x4 model; // model matrix
 };
 
-Object triangle;
-Object quad;
+Object sphere;
+Object coordinateSystem;
 
-void renderTriangle()
+void renderSphere()
 {
   // Create mvp.
-  glm::mat4x4 mvp = projection * view * triangle.model;
-  
-  // Bind the shader program and set uniform(s).
-  program.use();
-  program.setUniform("mvp", mvp);
-  
-  // Bind vertex array object so we can render the 1 triangle.
-  glBindVertexArray(triangle.vao);
-  glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, 0);
-  glBindVertexArray(0);
-}
-
-void renderQuad()
-{
-  // Create mvp.
-  glm::mat4x4 mvp = projection * view * quad.model;
+  glm::mat4x4 mvp = projection * view * sphere.model;
   
   // Bind the shader program and set uniform(s).
   program.use();
   program.setUniform("mvp", mvp);
   
   // Bind vertex array object so we can render the 2 triangles.
-  glBindVertexArray(quad.vao);
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+  glBindVertexArray(sphere.vao);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glDrawElements(GL_TRIANGLES, 21, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
 
-void initTriangle()
+void renderCoordinateSystem()
+{
+    // Create mvp.
+  glm::mat4x4 mvp = projection * view * coordinateSystem.model;
+  
+  // Bind the shader program and set uniform(s).
+  program.use();
+  program.setUniform("mvp", mvp);
+  
+  // Bind vertex array object so we can render the 2 triangles.
+  glBindVertexArray(coordinateSystem.vao);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glDrawElements(GL_LINES, 6, GL_UNSIGNED_SHORT, 0);
+  glBindVertexArray(0);
+}
+
+void initSphere(float radius)
 {
   // Construct triangle. These vectors can go out of scope after we have send all data to the graphics card.
-  const std::vector<glm::vec3> vertices = { glm::vec3(-1.0f, 1.0f, 0.0f), glm::vec3(1.0f, -1.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f) };
-  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f) };
-  const std::vector<GLushort>  indices  = { 0, 1, 2 };
+  const std::vector<glm::vec3> vertices = { glm::vec3(0.0f, radius, 0.0f),
+                                            glm::vec3(radius, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 0.0f, radius),
+                                            glm::vec3(-radius, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 0.0f, -radius),
+                                            glm::vec3(0.0f, -radius, 0.0f) };
+  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 1.0f, 1.0f),
+                                            glm::vec3(1.0f, 1.0f, 1.0f),
+                                            glm::vec3(1.0f, 1.0f, 1.0f),
+                                            glm::vec3(1.0f, 1.0f, 1.0f),
+                                            glm::vec3(1.0f, 1.0f, 1.0f),
+                                            glm::vec3(1.0f, 1.0f, 1.0f) };
+  const std::vector<GLushort>  indices  = { 0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1, 5, 1, 2, 5, 2, 3, 5, 3, 4};
 
   GLuint programId = program.getHandle();
   GLuint pos;
 
   // Step 0: Create vertex array object.
-  glGenVertexArrays(1, &triangle.vao);
-  glBindVertexArray(triangle.vao);
+  glGenVertexArrays(1, &sphere.vao);
+  glBindVertexArray(sphere.vao);
   
   // Step 1: Create vertex buffer object for position attribute and bind it to the associated "shader attribute".
-  glGenBuffers(1, &triangle.positionBuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, triangle.positionBuffer);
+  glGenBuffers(1, &sphere.positionBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, sphere.positionBuffer);
   glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
   
   // Bind it to position.
@@ -115,8 +132,8 @@ void initTriangle()
   glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
   
   // Step 2: Create vertex buffer object for color attribute and bind it to...
-  glGenBuffers(1, &triangle.colorBuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, triangle.colorBuffer);
+  glGenBuffers(1, &sphere.colorBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, sphere.colorBuffer);
   glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
   
   // Bind it to color.
@@ -125,34 +142,45 @@ void initTriangle()
   glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
   
   // Step 3: Create vertex buffer object for indices. No binding needed here.
-  glGenBuffers(1, &triangle.indexBuffer);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triangle.indexBuffer);
+  glGenBuffers(1, &sphere.indexBuffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphere.indexBuffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW);
   
   // Unbind vertex array object (back to default).
   glBindVertexArray(0);
   
   // Modify model matrix.
-  triangle.model = glm::translate(glm::mat4(1.0f), glm::vec3(-1.25f, 0.0f, 0.0f));
+  // sphere.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+  sphere.model = glm::mat4(1.0f);
 }
 
-void initQuad()
+void initCoordinateSystem()
 {
   // Construct triangle. These vectors can go out of scope after we have send all data to the graphics card.
-  const std::vector<glm::vec3> vertices = { { -1.0f, 1.0f, 0.0f }, { -1.0, -1.0, 0.0 }, { 1.0f, -1.0f, 0.0f }, { 1.0f, 1.0f, 0.0f } };
-  const std::vector<glm::vec3> colors   = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
-  const std::vector<GLushort>  indices  = { 0, 1, 2, 0, 2, 3 };
+  const std::vector<glm::vec3> vertices = { glm::vec3(0.0f, 0.0f, 0.0f),
+                                            glm::vec3(2.0f, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 2.0f, 0.0f),
+                                            glm::vec3(0.0f, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 0.0f, 2.0f) };
+  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 0.0f, 0.0f),
+                                            glm::vec3(1.0f, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 1.0f, 0.0f),
+                                            glm::vec3(0.0f, 1.0f, 0.0f),
+                                            glm::vec3(0.0f, 0.0f, 1.0f),
+                                            glm::vec3(0.0f, 0.0f, 1.0f) };
+  const std::vector<GLushort>  indices  = { 0, 1, 2, 3, 4, 5 };
 
   GLuint programId = program.getHandle();
   GLuint pos;
-  
+
   // Step 0: Create vertex array object.
-  glGenVertexArrays(1, &quad.vao);
-  glBindVertexArray(quad.vao);
+  glGenVertexArrays(1, &coordinateSystem.vao);
+  glBindVertexArray(coordinateSystem.vao);
   
   // Step 1: Create vertex buffer object for position attribute and bind it to the associated "shader attribute".
-  glGenBuffers(1, &quad.positionBuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, quad.positionBuffer);
+  glGenBuffers(1, &coordinateSystem.positionBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, coordinateSystem.positionBuffer);
   glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
   
   // Bind it to position.
@@ -161,8 +189,8 @@ void initQuad()
   glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
   
   // Step 2: Create vertex buffer object for color attribute and bind it to...
-  glGenBuffers(1, &quad.colorBuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, quad.colorBuffer);
+  glGenBuffers(1, &coordinateSystem.colorBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, coordinateSystem.colorBuffer);
   glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
   
   // Bind it to color.
@@ -171,15 +199,16 @@ void initQuad()
   glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
   
   // Step 3: Create vertex buffer object for indices. No binding needed here.
-  glGenBuffers(1, &quad.indexBuffer);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.indexBuffer);
+  glGenBuffers(1, &coordinateSystem.indexBuffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, coordinateSystem.indexBuffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW);
   
   // Unbind vertex array object (back to default).
   glBindVertexArray(0);
   
   // Modify model matrix.
-  quad.model = glm::translate(glm::mat4(1.0f), glm::vec3(1.25f, 0.0f, 0.0f));
+  // coordinateSystem.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+  coordinateSystem.model = glm::mat4(1.0f);
 }
 
 /*
@@ -215,8 +244,8 @@ bool init()
   }
 
   // Create all objects.
-  initTriangle();
-  initQuad();
+  initSphere(1.0f);
+  initCoordinateSystem();
   
   return true;
 }
@@ -228,8 +257,9 @@ void render()
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	renderTriangle();
-	renderQuad();
+  // Render all objects.
+  renderSphere();
+  renderCoordinateSystem();
 }
 
 void glutDisplay ()
@@ -262,20 +292,28 @@ void glutKeyboard (unsigned char keycode, int x, int y)
     return;
     
   case '+':
-    // do something
     break;
   case '-':
     // do something
     break;
   case 'x':
-    // do something
+    sphere.model = glm::rotate(sphere.model, glm::radians(rotationRate), glm::vec3(1.0f, 0.0f, 0.0f));
+    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(rotationRate), glm::vec3(1.0f, 0.0f, 0.0f));
+    cumulativeRotations[0] += rotationRate;
     break;
   case 'y':
-    // do something
+    sphere.model = glm::rotate(sphere.model, glm::radians(rotationRate), glm::vec3(0.0f, 1.0f, 0.0f));
+    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(rotationRate), glm::vec3(0.0f, 1.0f, 0.0f));
+    cumulativeRotations[1] += rotationRate;
     break;
   case 'z':
-    // do something
+    sphere.model = glm::rotate(sphere.model, glm::radians(rotationRate), glm::vec3(0.0f, 0.0f, 1.0f));
+    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(rotationRate), glm::vec3(0.0f, 0.0f, 1.0f));
+    cumulativeRotations[2] += rotationRate;
     break;
+  case 'n':
+    sphere.model = glm::mat4x4(1.0f);
+    coordinateSystem.model = glm::mat4x4(1.0f);
   }
   glutPostRedisplay();
 }
@@ -293,7 +331,7 @@ int main(int argc, char** argv)
   glutInitContextFlags  (GLUT_FORWARD_COMPATIBLE | GLUT_DEBUG);
   glutInitDisplayMode   (GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
   
-  glutCreateWindow("Aufgabenblatt 01");
+  glutCreateWindow("Aufgabenblatt 02");
   glutID = glutGetWindow();
   
   // GLEW: Load opengl extensions
