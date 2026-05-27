@@ -27,10 +27,17 @@ glm::mat4x4 projection;
 float zNear = 0.1f;
 float zFar  = 100.0f;
 
-float radius = 1.0f;
-int n = 0;
-const float rotationRate = 10.0f;
-glm::vec3 cumulativeRotations = glm::vec3(0.0f, 0.0f, 0.0f);
+unsigned short radius = 2;
+const unsigned short MAX_RADIUS = 3;
+const unsigned short MIN_RADIUS = 0;
+const float SIZE_STEP = 0.5f;
+unsigned short n = 0;
+
+float zoom = 4.0f;
+const unsigned short MAX_ZOOM = 7;
+const unsigned short MIN_ZOOM = 1;
+
+const float ROTATION_RATE = 10.0f;
 
 /*
 Struct to hold data for object rendering.
@@ -97,8 +104,9 @@ void renderCoordinateSystem()
   glBindVertexArray(0);
 }
 
-void initSphere(float radius)
+void initSphere()
 {
+  float radius = 1.0f;
   // Construct triangle. These vectors can go out of scope after we have send all data to the graphics card.
   const std::vector<glm::vec3> vertices = { glm::vec3(0.0f, radius, 0.0f),
                                             glm::vec3(radius, 0.0f, 0.0f),
@@ -106,13 +114,13 @@ void initSphere(float radius)
                                             glm::vec3(-radius, 0.0f, 0.0f),
                                             glm::vec3(0.0f, 0.0f, -radius),
                                             glm::vec3(0.0f, -radius, 0.0f) };
-  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 1.0f, 1.0f),
-                                            glm::vec3(1.0f, 1.0f, 1.0f),
-                                            glm::vec3(1.0f, 1.0f, 1.0f),
-                                            glm::vec3(1.0f, 1.0f, 1.0f),
-                                            glm::vec3(1.0f, 1.0f, 1.0f),
-                                            glm::vec3(1.0f, 1.0f, 1.0f) };
-  const std::vector<GLushort>  indices  = { 0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1, 5, 1, 2, 5, 2, 3, 5, 3, 4};
+  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f) };
+  const std::vector<GLushort>  indices  = { 0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1, 5, 1, 2, 5, 2, 3, 5, 3, 4 };
 
   GLuint programId = program.getHandle();
   GLuint pos;
@@ -149,8 +157,6 @@ void initSphere(float radius)
   // Unbind vertex array object (back to default).
   glBindVertexArray(0);
   
-  // Modify model matrix.
-  // sphere.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
   sphere.model = glm::mat4(1.0f);
 }
 
@@ -206,8 +212,6 @@ void initCoordinateSystem()
   // Unbind vertex array object (back to default).
   glBindVertexArray(0);
   
-  // Modify model matrix.
-  // coordinateSystem.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
   coordinateSystem.model = glm::mat4(1.0f);
 }
 
@@ -244,7 +248,7 @@ bool init()
   }
 
   // Create all objects.
-  initSphere(1.0f);
+  initSphere();
   initCoordinateSystem();
   
   return true;
@@ -286,34 +290,70 @@ void glutResize (int width, int height)
  */
 void glutKeyboard (unsigned char keycode, int x, int y)
 {
+  glm::vec3 eye(0.0f, 0.0f, zoom);
+  glm::vec3 center(0.0f, 0.0f, 0.0f);
+  glm::vec3 up(0.0f, 1.0f, 0.0f);
+
   switch (keycode) {
   case 27: // ESC
     glutDestroyWindow ( glutID );
     return;
-    
-  case '+':
+
+  case 's':
+    if (zoom > MIN_ZOOM) {
+      eye[2] -= 1;
+      zoom -= 1;
+      view = glm::lookAt(eye, center, up);
+    }
     break;
-  case '-':
-    // do something
+  case 'a':
+    if (zoom < MAX_ZOOM) {
+      eye[2] += 1;
+      zoom += 1;
+      view = glm::lookAt(eye, center, up);
+    }
     break;
   case 'x':
-    sphere.model = glm::rotate(sphere.model, glm::radians(rotationRate), glm::vec3(1.0f, 0.0f, 0.0f));
-    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(rotationRate), glm::vec3(1.0f, 0.0f, 0.0f));
-    cumulativeRotations[0] += rotationRate;
+    sphere.model = glm::rotate(sphere.model, glm::radians(ROTATION_RATE), glm::vec3(1.0f, 0.0f, 0.0f));
+    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(ROTATION_RATE), glm::vec3(1.0f, 0.0f, 0.0f));
     break;
   case 'y':
-    sphere.model = glm::rotate(sphere.model, glm::radians(rotationRate), glm::vec3(0.0f, 1.0f, 0.0f));
-    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(rotationRate), glm::vec3(0.0f, 1.0f, 0.0f));
-    cumulativeRotations[1] += rotationRate;
+    sphere.model = glm::rotate(sphere.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 1.0f, 0.0f));
+    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 1.0f, 0.0f));
     break;
   case 'z':
-    sphere.model = glm::rotate(sphere.model, glm::radians(rotationRate), glm::vec3(0.0f, 0.0f, 1.0f));
-    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(rotationRate), glm::vec3(0.0f, 0.0f, 1.0f));
-    cumulativeRotations[2] += rotationRate;
+    sphere.model = glm::rotate(sphere.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 0.0f, 1.0f));
+    coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 0.0f, 1.0f));
     break;
   case 'n':
     sphere.model = glm::mat4x4(1.0f);
     coordinateSystem.model = glm::mat4x4(1.0f);
+    break;
+  case 'r':
+    // std::cout << "r" << std::endl;
+    // if (radius - SIZE_STEP > MIN_RADIUS) {
+    //   glm::mat4x4 old_model = sphere.model;
+    //   radius -= SIZE_STEP;
+    //   initSphere(radius);
+    //   sphere.model = old_model;
+    // }
+    if (radius > MIN_RADIUS) {
+      radius--;
+      sphere.model = glm::scale(sphere.model, glm::vec3(0.5f, 0.5f, 0.5f));
+    }
+    break;
+  case 'R':
+    // if (radius + SIZE_STEP < MIN_RADIUS) {
+    //   glm::mat4x4 old_model = sphere.model;
+    //   radius += SIZE_STEP;
+    //   initSphere(radius);
+    //   sphere.model = old_model;
+    // }
+    if (radius < MAX_RADIUS) {
+      radius++;
+      sphere.model = glm::scale(sphere.model, glm::vec3(2.0f, 2.0f, 2.0f));
+    }
+    break;
   }
   glutPostRedisplay();
 }
