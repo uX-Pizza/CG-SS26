@@ -37,6 +37,13 @@ float radius = 0;
 const float MIN_RADIUS = -3;
 const float MAX_RADIUS = 2;
 
+int sphereIndexCount = 0;
+int n = 0;
+
+bool showNoramls = false;
+GLuint sphereNormalsVAO = 0;
+GLuint sphereNoramlsVBO = 0;
+int normalLinesVertexCount = 0;
 
 /*
 Struct to hold data for object rendering.
@@ -48,6 +55,7 @@ public:
     : vao(0),
       positionBuffer(0),
       colorBuffer(0),
+      normalBuffer(0),
       indexBuffer(0)
   {}
 
@@ -55,6 +63,7 @@ public:
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &indexBuffer);
     glDeleteBuffers(1, &colorBuffer);
+    glDeleteBuffers(1, &normalBuffer);
     glDeleteBuffers(1, &positionBuffer);
   }
 
@@ -64,12 +73,37 @@ public:
   GLuint colorBuffer;    // ID of vertex-buffer: color
   
   GLuint indexBuffer;    // ID of index-buffer
+
+  GLuint normalBuffer;
   
   glm::mat4x4 model; // model matrix
 };
 
 Object sphere;
 Object local_koordinate_system;
+Object test;
+
+glm::vec3 calculate_coordinates(float alpha, float phi){
+
+  float test_radius = 1.0f;
+
+  float alpha_pi = alpha / 180.0f * M_PI;
+  std::cout << "alpha nach rechnung: " << alpha_pi << std::endl;
+
+  float phi_pi = phi / 180.0f * M_PI;
+  std::cout << "phi: " << phi_pi << std::endl;
+
+  float x = (test_radius * cos(alpha_pi));
+  std::cout << "x: " << x << std::endl; 
+
+  float y = (test_radius * cos(alpha_pi) * sin(phi_pi));
+  std::cout << "y: " << y << std::endl; 
+
+  float z = (test_radius * sin(alpha_pi));
+  std::cout << "z: " << z << std::endl; 
+
+  return glm::vec3(x,y,z);
+}
 
 void renderLocalSystem(){
   // Create mvp.
@@ -154,11 +188,123 @@ void rederSphere(){
   // Bind vertex array object so we can render the 1 triangle.
   glBindVertexArray(sphere.vao);
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-  glDrawElements(GL_TRIANGLES, 21, GL_UNSIGNED_SHORT, 0);
+  glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
 
-void initSphere(){
+glm::vec3 getCenter(glm::vec3 p1, glm::vec3 p2){
+  glm::vec3 middle = p1 + p2;
+
+  return glm::normalize(middle) * 1.0f;
+}
+
+void subdivide(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3, int depth, std::vector<glm::vec3>& vertices) {
+    // Basisfall: Keine Unterteilungen mehr übrig
+    if (depth == 0) {
+        // Wir pushen die Vertices in Counterclockwise-Reihenfolge (CCW) rein! [cite: 7]
+        vertices.push_back(v1);
+        vertices.push_back(v2);
+        vertices.push_back(v3);
+        return;
+    }
+
+    // 1. Die drei neuen Kantenmittelpunkte berechnen
+    glm::vec3 v12 = getCenter(v1, v2);
+    glm::vec3 v23 = getCenter(v2, v3);
+    glm::vec3 v31 = getCenter(v3, v1);
+
+    // 2. Das Dreieck in 4 neue Dreiecke aufteilen und eine Ebene tiefer gehen (depth - 1)
+    // Achte hier penibel auf die CCW-Orientierung für jedes Teildreieck! [cite: 7]
+    subdivide(v1,  v12, v31, depth - 1, vertices);
+    subdivide(v2,  v23, v12, depth - 1, vertices);
+    subdivide(v3,  v31, v23, depth - 1, vertices);
+    subdivide(v12, v23, v31, depth - 1, vertices);
+}
+
+void updateSphereMesh(int depth) {
+    float r = 1.0f; 
+    
+    glm::vec3 octahedron[6] = {
+        glm::vec3(0.0f,  r, 0.0f),  // Oben (0)
+        glm::vec3( r, 0.0f, 0.0f),  // Rechts (1)
+        glm::vec3(0.0f, 0.0f,  r),  // Vorne (2)
+        glm::vec3(-r, 0.0f, 0.0f),  // Links (3)
+        glm::vec3(0.0f, 0.0f, -r),  // Hinten (4)
+        glm::vec3(0.0f, -r, 0.0f)   // Unten (5)
+    };
+
+    std::vector<glm::vec3> vertices;
+
+    // Obere Pyramidenhälfte
+    subdivide(octahedron[0], octahedron[1], octahedron[2], depth, vertices);
+    subdivide(octahedron[0], octahedron[2], octahedron[3], depth, vertices);
+    subdivide(octahedron[0], octahedron[3], octahedron[4], depth, vertices);
+    subdivide(octahedron[0], octahedron[4], octahedron[1], depth, vertices);
+
+    // Untere Pyramidenhälfte
+    subdivide(octahedron[5], octahedron[2], octahedron[1], depth, vertices);
+    subdivide(octahedron[5], octahedron[3], octahedron[2], depth, vertices);
+    subdivide(octahedron[5], octahedron[4], octahedron[3], depth, vertices);
+    subdivide(octahedron[5], octahedron[1], octahedron[4], depth, vertices);
+
+    //Dreiecke werden hintereinander gespeichert, deswegen (1,2,3,4,5...)
+    std::vector<GLushort> indices;
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        indices.push_back(static_cast<GLushort>(i));
+    }
+
+    //Farbe
+    std::vector<glm::vec3> colors(vertices.size(), glm::vec3(1.0f, 1.0f, 0.0f));
+
+
+    sphereIndexCount = indices.size();
+
+    glBindVertexArray(sphere.vao);
+  
+    // Positionen im VBO überschreiben
+    glBindBuffer(GL_ARRAY_BUFFER, sphere.positionBuffer);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+  
+    // Farben im VBO überschreiben
+    glBindBuffer(GL_ARRAY_BUFFER, sphere.colorBuffer);
+    glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+  
+    // Indizes im EBO überschreiben
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphere.indexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW);
+  
+    glBindVertexArray(0);
+}
+void initSphere() {
+    GLuint programId = program.getHandle();
+    GLuint pos;
+
+    // VAO und VBOs initial einmalig erzeugen
+    glGenVertexArrays(1, &sphere.vao);
+    glBindVertexArray(sphere.vao);
+  
+    glGenBuffers(1, &sphere.positionBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, sphere.positionBuffer);
+    pos = glGetAttribLocation(programId, "position");
+    glEnableVertexAttribArray(pos);
+    glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+    glGenBuffers(1, &sphere.colorBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, sphere.colorBuffer);
+    pos = glGetAttribLocation(programId, "color");
+    glEnableVertexAttribArray(pos);
+    glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+    glGenBuffers(1, &sphere.indexBuffer);
+  
+    glBindVertexArray(0);
+    sphere.model = glm::mat4(1.0f);
+
+    //Das erste Mal das Mesh-Update mit n=0 aufrufen
+    updateSphereMesh(n);
+}
+
+void initSphere_old(){
   float radius = 1.0f;
   // Construct triangle. These vectors can go out of scope after we have send all data to the graphics card.
   const std::vector<glm::vec3> vertices = { glm::vec3(0.0f, radius, 0.0f), 
@@ -166,7 +312,7 @@ void initSphere(){
                                             glm::vec3(0.0f, 0.0f, radius), 
                                             glm::vec3(-radius, 0.0f, 0.0f), 
                                             glm::vec3(0.0f, 0.0f, -radius), 
-                                            glm::vec3(0.0f, -radius, 0.0f) };
+                                            glm::vec3(0.0f, -radius, 0.0f)};
 
   const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 1.0f, 0.0f),
                                             glm::vec3(1.0f, 1.0f, 0.0f),
@@ -176,7 +322,7 @@ void initSphere(){
                                             glm::vec3(1.0f, 1.0f, 0.0f) 
                                             };
 
-  const std::vector<GLushort>  indices  = {0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1, 5, 1, 2, 5, 2, 3, 5, 3, 4 };
+  const std::vector<GLushort>  indices  = {0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1, 5, 1, 2, 5, 2, 3, 5, 3, 4};
   GLuint programId = program.getHandle();
   GLuint pos;
 
@@ -294,15 +440,33 @@ void glutKeyboard (unsigned char keycode, int x, int y)
   glm::vec3 center(0.0f, 0.0f, 0.0f);
   glm::vec3 up(0.0f, 1.0f, 0.0f);
 
+  std::vector<glm::vec3> point_vec; 
+
   switch (keycode) {
     case 27: // ESC
       glutDestroyWindow ( glutID );
       return;
     case '+':
-      std::cout << "pressed +";
+      if (n < 4){
+        n+=1;
+        updateSphereMesh(n);
+        /*
+        
+        n += 1;
+        for (int i = 0; i<n; i++){
+          float alpha = 90.0f / i;
+          float phi = 90.0f / i-1;
+          point_vec.push_back(calculate_coordinates(alpha, phi));
+        }
+        */
+      }
       break;
     case '-':
-      // do something
+        if (n > 0){
+          n-=1;
+          updateSphereMesh(n);
+        }
+
       break;
     case 'x':
       local_koordinate_system.model = glm::rotate(local_koordinate_system.model,glm::radians(angle) , glm::vec3(1.0f,0.0f,0.0f ));
@@ -355,7 +519,7 @@ void glutKeyboard (unsigned char keycode, int x, int y)
 int main(int argc, char** argv)
 {
   // GLUT: Initialize freeglut library (window toolkit).
-  glutInitWindowSize    (WINDOW_WIDTH, WINDOW_HEIGHT);
+  glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
   glutInitWindowPosition(40,40);
   glutInit(&argc, argv);
   
