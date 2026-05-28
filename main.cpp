@@ -27,11 +27,11 @@ glm::mat4x4 projection;
 float zNear = 0.1f;
 float zFar  = 100.0f;
 
+unsigned short n = 0;
+
 unsigned short radius = 2;
 const unsigned short MAX_RADIUS = 3;
 const unsigned short MIN_RADIUS = 0;
-const float SIZE_STEP = 0.5f;
-unsigned short n = 0;
 
 float zoom = 4.0f;
 const unsigned short MAX_ZOOM = 7;
@@ -84,7 +84,7 @@ void renderSphere()
   // Bind vertex array object so we can render the 2 triangles.
   glBindVertexArray(sphere.vao);
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-  glDrawElements(GL_TRIANGLES, 21, GL_UNSIGNED_SHORT, 0);
+  glDrawElements(GL_TRIANGLES, 1500, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
 
@@ -104,24 +104,135 @@ void renderCoordinateSystem()
   glBindVertexArray(0);
 }
 
-void initSphere()
+void initTesselatedSphere(unsigned short n)
 {
-  float radius = 1.0f;
-  // Construct triangle. These vectors can go out of scope after we have send all data to the graphics card.
-  const std::vector<glm::vec3> vertices = { glm::vec3(0.0f, radius, 0.0f),
-                                            glm::vec3(radius, 0.0f, 0.0f),
-                                            glm::vec3(0.0f, 0.0f, radius),
-                                            glm::vec3(-radius, 0.0f, 0.0f),
-                                            glm::vec3(0.0f, 0.0f, -radius),
-                                            glm::vec3(0.0f, -radius, 0.0f) };
-  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 1.0f, 0.0f),
-                                            glm::vec3(1.0f, 1.0f, 0.0f),
-                                            glm::vec3(1.0f, 1.0f, 0.0f),
-                                            glm::vec3(1.0f, 1.0f, 0.0f),
-                                            glm::vec3(1.0f, 1.0f, 0.0f),
-                                            glm::vec3(1.0f, 1.0f, 0.0f) };
-  const std::vector<GLushort>  indices  = { 0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1, 5, 1, 2, 5, 2, 3, 5, 3, 4 };
+  float radius = 0.75f;
 
+  std::vector<glm::vec3> vertices = {};
+  std::vector<glm::vec3> colors = {};
+  std::vector<GLushort> indices = {};
+
+  
+  // Create vertices
+  for (int layer=0; layer<=2+n*2; layer++) {
+    float y = cos((180 * ((float)layer/(2+(float)n*2))) * M_PI/180) * radius;
+    float sin_remain = sin((180 * ((float)layer/(2+(float)n*2))) * M_PI/180) * radius;
+    if (layer == 0 || layer == 2+n*2) { // if current layer is the first or last layer
+      vertices.push_back(glm::vec3(0.0f, y, 0.0f)); // add vertex
+      colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
+    } else {
+      if (layer <= (2+n*2) / 2) {
+        for (int i=0; i<layer*4; i++) {
+          float x = cos((360 * (((float)i) + 1) / (((float)layer) * 4)) * M_PI/180) * sin_remain;
+          float z = sin((360 * (((float)i) + 1) / (((float)layer) * 4)) * M_PI/180) * sin_remain;
+          vertices.push_back(glm::vec3(x, y, z)); // add vertex
+          colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
+        }
+      } else {
+        for (int i=0; i<((2+n*2) - layer)*4; i++) {
+          float x = cos((360 * (((float)i) + 1) / (((2+n*2) - layer)*4)) * M_PI/180) * sin_remain;
+          float z = sin((360 * (((float)i) + 1) / (((2+n*2) - layer)*4)) * M_PI/180) * sin_remain;
+          vertices.push_back(glm::vec3(x, y, z)); // add vertex
+          colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
+        }
+      }
+    }
+  }
+
+
+  // Create indices
+  std::vector<int> layerStart;
+  int currentIndex = 0;
+
+  for (int layer = 0; layer <= 2 + n * 2; layer++) {
+    layerStart.push_back(currentIndex);
+
+    if (layer == 0 || layer == 2 + n * 2) // If layer is top or bottom
+      currentIndex += 1;
+    else if (layer <= (2 + n * 2) / 2) // If next layer is on the top half
+      currentIndex += layer * 4;
+    else // If layer is on the bottom half
+      currentIndex += ((2 + n * 2) - layer) * 4;
+  }
+
+  int maxLayer = 2 + n * 2;
+
+  for (int layer = 0; layer < maxLayer; layer++) {
+
+    int currCount;
+    int nextCount;
+
+    if (layer == 0)
+      currCount = 1;
+    else if (layer <= maxLayer / 2)
+      currCount = layer * 4;
+    else
+      currCount = (maxLayer - layer) * 4;
+
+    if (layer + 1 == maxLayer)
+      nextCount = 1;
+    else if ((layer + 1) <= maxLayer / 2)
+      nextCount = (layer + 1) * 4;
+    else
+      nextCount = (maxLayer - (layer + 1)) * 4;
+
+    int currStart = layerStart[layer];
+    int nextStart = layerStart[layer + 1];
+
+    if (currCount == 1) {
+      // Top cap
+      for (int i = 0; i < nextCount; i++) {
+        indices.push_back(currStart);
+        indices.push_back(nextStart + i);
+        indices.push_back(nextStart + ((i + 1) % nextCount));
+      }
+    }
+    else if (nextCount == 1) {
+      // Bottom cap
+      for (int i = 0; i < currCount; i++) {
+        indices.push_back(currStart + i);
+        indices.push_back(nextStart);
+        indices.push_back(currStart + ((i + 1) % currCount));
+      }
+    }
+    else {
+      int i = 0;
+      int j = 0;
+
+      while (i < currCount && j < nextCount)
+      {
+          int currA = currStart + i % currCount;
+          int currB = currStart + (i + 1) % currCount;
+
+          int nextA = nextStart + j % nextCount;
+          int nextB = nextStart + (j + 1) % nextCount;
+
+          float currRatio = (float)(i + 1) / currCount;
+          float nextRatio = (float)(j + 1) / nextCount;
+
+          if (
+              (currCount < nextCount && currRatio < nextRatio) ||
+              (currCount > nextCount && currRatio <= nextRatio)
+            )
+          {
+              indices.push_back(currA);
+              indices.push_back(nextA);
+              indices.push_back(currB);
+              i++;
+          }
+          else
+          {
+              indices.push_back(currA);
+              indices.push_back(nextA);
+              indices.push_back(nextB);
+              j++;
+          }
+      }
+    }
+  }
+
+
+  // Sphere object
   GLuint programId = program.getHandle();
   GLuint pos;
 
@@ -248,8 +359,8 @@ bool init()
   }
 
   // Create all objects.
-  initSphere();
   initCoordinateSystem();
+  initTesselatedSphere(n);
   
   return true;
 }
@@ -299,6 +410,22 @@ void glutKeyboard (unsigned char keycode, int x, int y)
     glutDestroyWindow ( glutID );
     return;
 
+  case '+':
+    if (n < 4) {
+      n++;
+      glm::mat4x4 old_model = sphere.model;
+      initTesselatedSphere(n);
+      sphere.model = old_model;
+    }
+    break;
+  case '-':
+    if (n > 0) {
+      n--;
+      glm::mat4x4 old_model = sphere.model;
+      initTesselatedSphere(n);
+      sphere.model = old_model;
+    }
+    break;
   case 's':
     if (zoom > MIN_ZOOM) {
       eye[2] -= 1;
@@ -328,27 +455,16 @@ void glutKeyboard (unsigned char keycode, int x, int y)
   case 'n':
     sphere.model = glm::mat4x4(1.0f);
     coordinateSystem.model = glm::mat4x4(1.0f);
+
+    radius = 2;
     break;
   case 'r':
-    // std::cout << "r" << std::endl;
-    // if (radius - SIZE_STEP > MIN_RADIUS) {
-    //   glm::mat4x4 old_model = sphere.model;
-    //   radius -= SIZE_STEP;
-    //   initSphere(radius);
-    //   sphere.model = old_model;
-    // }
     if (radius > MIN_RADIUS) {
       radius--;
       sphere.model = glm::scale(sphere.model, glm::vec3(0.5f, 0.5f, 0.5f));
     }
     break;
   case 'R':
-    // if (radius + SIZE_STEP < MIN_RADIUS) {
-    //   glm::mat4x4 old_model = sphere.model;
-    //   radius += SIZE_STEP;
-    //   initSphere(radius);
-    //   sphere.model = old_model;
-    // }
     if (radius < MAX_RADIUS) {
       radius++;
       sphere.model = glm::scale(sphere.model, glm::vec3(2.0f, 2.0f, 2.0f));
