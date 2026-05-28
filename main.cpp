@@ -39,6 +39,9 @@ const unsigned short MIN_ZOOM = 1;
 
 const float ROTATION_RATE = 10.0f;
 
+const float NORM_LENGTH_FACTOR = 0.5f;
+bool show_norms = false;
+
 /*
 Struct to hold data for object rendering.
 */
@@ -70,6 +73,7 @@ public:
 };
 
 Object sphere;
+Object normals;
 Object coordinateSystem;
 
 void renderSphere()
@@ -88,9 +92,25 @@ void renderSphere()
   glBindVertexArray(0);
 }
 
+void renderNormals()
+{
+  // Create mvp.
+  glm::mat4x4 mvp = projection * view * normals.model;
+  
+  // Bind the shader program and set uniform(s).
+  program.use();
+  program.setUniform("mvp", mvp);
+  
+  // Bind vertex array object so we can render the 2 triangles.
+  glBindVertexArray(normals.vao);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glDrawElements(GL_LINES, 1500, GL_UNSIGNED_SHORT, 0);
+  glBindVertexArray(0);
+}
+
 void renderCoordinateSystem()
 {
-    // Create mvp.
+  // Create mvp.
   glm::mat4x4 mvp = projection * view * coordinateSystem.model;
   
   // Bind the shader program and set uniform(s).
@@ -112,26 +132,33 @@ void initTesselatedSphere(unsigned short n)
   std::vector<glm::vec3> colors = {};
   std::vector<GLushort> indices = {};
 
+  std::vector<glm::vec3> norm_vertices = {};
+  std::vector<glm::vec3> norm_colors = {};
+  std::vector<GLushort> norm_indices = {};
+
   
   // Create vertices
   for (int layer=0; layer<=2+n*2; layer++) {
     float y = cos((180 * ((float)layer/(2+(float)n*2))) * M_PI/180) * radius;
     float sin_remain = sin((180 * ((float)layer/(2+(float)n*2))) * M_PI/180) * radius;
+
     if (layer == 0 || layer == 2+n*2) { // if current layer is the first or last layer
       vertices.push_back(glm::vec3(0.0f, y, 0.0f)); // add vertex
       colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
     } else {
       if (layer <= (2+n*2) / 2) {
         for (int i=0; i<layer*4; i++) {
-          float x = cos((360 * (((float)i) + 1) / (((float)layer) * 4)) * M_PI/180) * sin_remain;
-          float z = sin((360 * (((float)i) + 1) / (((float)layer) * 4)) * M_PI/180) * sin_remain;
+          float angle = 360 * (((float)i) + 1) / (((float)layer) * 4);
+          float x = cos(angle * M_PI/180) * sin_remain;
+          float z = sin(angle * M_PI/180) * sin_remain;
           vertices.push_back(glm::vec3(x, y, z)); // add vertex
           colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
         }
       } else {
         for (int i=0; i<((2+n*2) - layer)*4; i++) {
-          float x = cos((360 * (((float)i) + 1) / (((2+n*2) - layer)*4)) * M_PI/180) * sin_remain;
-          float z = sin((360 * (((float)i) + 1) / (((2+n*2) - layer)*4)) * M_PI/180) * sin_remain;
+          float angle = 360 * (((float)i) + 1) / (((2+n*2) - layer)*4);
+          float x = cos(angle * M_PI/180) * sin_remain;
+          float z = sin(angle * M_PI/180) * sin_remain;
           vertices.push_back(glm::vec3(x, y, z)); // add vertex
           colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
         }
@@ -159,8 +186,8 @@ void initTesselatedSphere(unsigned short n)
 
   for (int layer = 0; layer < maxLayer; layer++) {
 
-    int currCount;
-    int nextCount;
+    int currCount; // number of vertices in current layer
+    int nextCount; // number of vertices in next layer
 
     if (layer == 0)
       currCount = 1;
@@ -269,6 +296,64 @@ void initTesselatedSphere(unsigned short n)
   glBindVertexArray(0);
   
   sphere.model = glm::mat4(1.0f);
+
+
+  // Normals object
+  for (size_t i = 0; i < indices.size(); i += 3) {
+    glm::vec3 a = vertices[indices[i]];
+    glm::vec3 b = vertices[indices[i + 1]];
+    glm::vec3 c = vertices[indices[i + 2]];
+
+    glm::vec3 center = (a + b + c) / 3.0f;
+
+    glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
+
+    norm_vertices.push_back(center);
+    norm_colors.push_back(glm::vec3(0.0f, 1.0f, 1.0f));
+    norm_vertices.push_back(center - normal * NORM_LENGTH_FACTOR);
+    norm_colors.push_back(glm::vec3(0.0f, 1.0f, 1.0f));
+  }
+
+  for (int i=0; i<norm_vertices.size(); i+=2) {
+    norm_indices.push_back(i);
+    norm_indices.push_back(i+1);
+  }
+
+  // Step 0: Create vertex array object.
+  glGenVertexArrays(1, &normals.vao);
+  glBindVertexArray(normals.vao);
+  
+  // Step 1: Create vertex buffer object for position attribute and bind it to the associated "shader attribute".
+  glGenBuffers(1, &normals.positionBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, normals.positionBuffer);
+  glBufferData(GL_ARRAY_BUFFER, norm_vertices.size() * sizeof(glm::vec3), norm_vertices.data(), GL_STATIC_DRAW);
+  
+  // Bind it to position.
+  pos = glGetAttribLocation(programId, "position");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  // Step 2: Create vertex buffer object for color attribute and bind it to...
+  glGenBuffers(1, &normals.colorBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, normals.colorBuffer);
+  glBufferData(GL_ARRAY_BUFFER, norm_colors.size() * sizeof(glm::vec3), norm_colors.data(), GL_STATIC_DRAW);
+  
+  // Bind it to color.
+  pos = glGetAttribLocation(programId, "color");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  // Step 3: Create vertex buffer object for indices. No binding needed here.
+  glGenBuffers(1, &normals.indexBuffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, normals.indexBuffer);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, norm_indices.size() * sizeof(GLushort), norm_indices.data(), GL_STATIC_DRAW);
+  
+  // Unbind vertex array object (back to default).
+  glBindVertexArray(0);
+  
+  // float angle = 90 * (1/(2+n*2));
+  // normals.model = glm::rotate(glm::mat4(1.0f), glm::radians(angle), glm::vec3(1.0f, 1.0f, 1.0f));
+  normals.model = glm::mat4x4(1.0f);
 }
 
 void initCoordinateSystem()
@@ -375,6 +460,10 @@ void render()
   // Render all objects.
   renderSphere();
   renderCoordinateSystem();
+
+  if (show_norms) {
+    renderNormals();
+  }
 }
 
 void glutDisplay ()
@@ -413,17 +502,21 @@ void glutKeyboard (unsigned char keycode, int x, int y)
   case '+':
     if (n < 4) {
       n++;
-      glm::mat4x4 old_model = sphere.model;
+      glm::mat4x4 old_sphere_model = sphere.model;
+      glm::mat4x4 old_norms_model = normals.model;
       initTesselatedSphere(n);
-      sphere.model = old_model;
+      sphere.model = old_sphere_model;
+      normals.model = old_norms_model;
     }
     break;
   case '-':
     if (n > 0) {
       n--;
-      glm::mat4x4 old_model = sphere.model;
+      glm::mat4x4 old_sphere_model = sphere.model;
+      glm::mat4x4 old_norms_model = normals.model;
       initTesselatedSphere(n);
-      sphere.model = old_model;
+      sphere.model = old_sphere_model;
+      normals.model = old_norms_model;
     }
     break;
   case 's':
@@ -442,18 +535,22 @@ void glutKeyboard (unsigned char keycode, int x, int y)
     break;
   case 'x':
     sphere.model = glm::rotate(sphere.model, glm::radians(ROTATION_RATE), glm::vec3(1.0f, 0.0f, 0.0f));
+    normals.model = glm::rotate(normals.model, glm::radians(ROTATION_RATE), glm::vec3(1.0f, 0.0f, 0.0f));
     coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(ROTATION_RATE), glm::vec3(1.0f, 0.0f, 0.0f));
     break;
   case 'y':
     sphere.model = glm::rotate(sphere.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 1.0f, 0.0f));
+    normals.model = glm::rotate(normals.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 1.0f, 0.0f));
     coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 1.0f, 0.0f));
     break;
   case 'z':
     sphere.model = glm::rotate(sphere.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 0.0f, 1.0f));
+    normals.model = glm::rotate(normals.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 0.0f, 1.0f));
     coordinateSystem.model = glm::rotate(coordinateSystem.model, glm::radians(ROTATION_RATE), glm::vec3(0.0f, 0.0f, 1.0f));
     break;
   case 'n':
     sphere.model = glm::mat4x4(1.0f);
+    normals.model = glm::mat4x4(1.0f);
     coordinateSystem.model = glm::mat4x4(1.0f);
 
     radius = 2;
@@ -462,14 +559,22 @@ void glutKeyboard (unsigned char keycode, int x, int y)
     if (radius > MIN_RADIUS) {
       radius--;
       sphere.model = glm::scale(sphere.model, glm::vec3(0.5f, 0.5f, 0.5f));
+      normals.model = glm::scale(normals.model, glm::vec3(0.5f, 0.5f, 0.5f));
     }
     break;
   case 'R':
     if (radius < MAX_RADIUS) {
       radius++;
       sphere.model = glm::scale(sphere.model, glm::vec3(2.0f, 2.0f, 2.0f));
+      normals.model = glm::scale(normals.model, glm::vec3(2.0f, 2.0f, 2.0f));
     }
     break;
+  case 'v':
+    if (show_norms == false) {
+      show_norms = true;
+    } else {
+      show_norms = false;
+    }
   }
   glutPostRedisplay();
 }
