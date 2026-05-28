@@ -27,6 +27,17 @@ glm::mat4x4 projection;
 float zNear = 0.1f;
 float zFar  = 100.0f;
 
+const float angle = 10.0f;
+
+float zoom = 0.0f;
+const float MAX_ZOOM = 4;
+const float MIN_ZOOM = -2;
+
+float radius = 0;
+const float MIN_RADIUS = -3;
+const float MAX_RADIUS = 2;
+
+
 /*
 Struct to hold data for object rendering.
 */
@@ -58,6 +69,79 @@ public:
 };
 
 Object sphere;
+Object local_koordinate_system;
+
+void renderLocalSystem(){
+  // Create mvp.
+  glm::mat4x4 mvp = projection * view * local_koordinate_system.model;
+  
+  // Bind the shader program and set uniform(s).
+  program.use();
+  program.setUniform("mvp", mvp);
+  
+  // Bind vertex array object so we can render the 1 triangle.
+  glBindVertexArray(local_koordinate_system.vao);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glDrawElements(GL_LINES, 6, GL_UNSIGNED_SHORT, 0);
+  glBindVertexArray(0);
+}
+
+void initLocalSystem(){
+  // Construct triangle. These vectors can go out of scope after we have send all data to the graphics card.
+  const std::vector<glm::vec3> vertices = { 
+                                            glm::vec3(0.0f,0.0f,0.0f),
+                                            glm::vec3(2.0f,0.0f,0.0f),
+                                            glm::vec3(0.0f,0.0f,0.0f),
+                                            glm::vec3(0.0f, 2.0f, 0.0f), 
+                                            glm::vec3(0.0f, 0.0f, 0.0f), 
+                                            glm::vec3(0.0f, 0.0f, 2.0f)};
+
+  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 0.0f, 0.0f),
+                                            glm::vec3(1.0f, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 1.0f, 0.0f),
+                                            glm::vec3(0.0f, 1.0f, 0.0f),
+                                            glm::vec3(0.0f, 0.0f, 1.0f),
+                                            glm::vec3(0.0f, 0.0f, 1.0f)};
+
+  const std::vector<GLushort>  indices  = {0, 1, 2, 3, 4, 5};
+  GLuint programId = program.getHandle();
+  GLuint pos;
+
+  // Step 0: Create vertex array object.
+  glGenVertexArrays(1, &local_koordinate_system.vao);
+  glBindVertexArray(local_koordinate_system.vao);
+  
+  // Step 1: Create vertex buffer object for position attribute and bind it to the associated "shader attribute".
+  glGenBuffers(1, &local_koordinate_system.positionBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, local_koordinate_system.positionBuffer);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+  
+  // Bind it to position.
+  pos = glGetAttribLocation(programId, "position");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  // Step 2: Create vertex buffer object for color attribute and bind it to...
+  glGenBuffers(1, &local_koordinate_system.colorBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, local_koordinate_system.colorBuffer);
+  glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+  
+  // Bind it to color.
+  pos = glGetAttribLocation(programId, "color");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  // Step 3: Create vertex buffer object for indices. No binding needed here.
+  glGenBuffers(1, &local_koordinate_system.indexBuffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, local_koordinate_system.indexBuffer);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW);
+  
+  // Unbind vertex array object (back to default).
+  glBindVertexArray(0);
+  
+  // Modify model matrix.
+  local_koordinate_system.model = glm::mat4(1.0f);
+}
 
 void rederSphere(){
     // Create mvp.
@@ -69,8 +153,8 @@ void rederSphere(){
   
   // Bind vertex array object so we can render the 1 triangle.
   glBindVertexArray(sphere.vao);
-  glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
-  glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, 0);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glDrawElements(GL_TRIANGLES, 21, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
 
@@ -79,21 +163,20 @@ void initSphere(){
   // Construct triangle. These vectors can go out of scope after we have send all data to the graphics card.
   const std::vector<glm::vec3> vertices = { glm::vec3(0.0f, radius, 0.0f), 
                                             glm::vec3(radius, 0.0f, 0.0f), 
-                                            glm::vec3(1.0f, 1.0f, radius), 
-                                            glm::vec3(1.0f, -radius, 0), 
-                                            glm::vec3(-radius, 0, 0), 
-                                            glm::vec3(1.0f, 1.0f, -radius), 
+                                            glm::vec3(0.0f, 0.0f, radius), 
+                                            glm::vec3(-radius, 0.0f, 0.0f), 
+                                            glm::vec3(0.0f, 0.0f, -radius), 
+                                            glm::vec3(0.0f, -radius, 0.0f) };
+
+  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f),
+                                            glm::vec3(1.0f, 1.0f, 0.0f) 
                                             };
 
-  const std::vector<glm::vec3> colors   = { glm::vec3(1.0f, 1.0f, 1.0f), 
-                                            glm::vec3(1.0f, 1.0f, 1.0f), 
-                                            glm::vec3(1.0f, 1.0f, 1.0f), 
-                                            glm::vec3(1.0f, 1.0f, 1.0f), 
-                                            glm::vec3(1.0f, 1.0f, 1.0f), 
-                                            glm::vec3(1.0f, 1.0f, 1.0f), 
-                                            };
-
-  const std::vector<GLushort>  indices  = { 0,1,2 , 2,1,3, 3,1,4, 4,0,1 , 0,4,5 , 5,4,3 , 3,5,2, 2,5,0 };
+  const std::vector<GLushort>  indices  = {0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1, 5, 1, 2, 5, 2, 3, 5, 3, 4 };
   GLuint programId = program.getHandle();
   GLuint pos;
 
@@ -130,7 +213,7 @@ void initSphere(){
   glBindVertexArray(0);
   
   // Modify model matrix.
-  sphere.model = glm::translate(glm::mat4(1.0f), glm::vec3(-1.25f, 0.0f, 0.0f));
+  sphere.model = glm::mat4(1.0f);
 }
 
 /*
@@ -167,6 +250,7 @@ bool init()
 
   // Create all objects.
   initSphere();
+  initLocalSystem();
   
   return true;
 }
@@ -179,6 +263,7 @@ void render()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   rederSphere();
+  renderLocalSystem();
 }
 
 void glutDisplay ()
@@ -205,6 +290,10 @@ void glutResize (int width, int height)
  */
 void glutKeyboard (unsigned char keycode, int x, int y)
 {
+  glm::vec3 eye(0.0f, 0.0f, 4.0f + zoom);
+  glm::vec3 center(0.0f, 0.0f, 0.0f);
+  glm::vec3 up(0.0f, 1.0f, 0.0f);
+
   switch (keycode) {
     case 27: // ESC
       glutDestroyWindow ( glutID );
@@ -216,19 +305,48 @@ void glutKeyboard (unsigned char keycode, int x, int y)
       // do something
       break;
     case 'x':
-      // do something
+      local_koordinate_system.model = glm::rotate(local_koordinate_system.model,glm::radians(angle) , glm::vec3(1.0f,0.0f,0.0f ));
+      sphere.model = glm::rotate(sphere.model, glm::radians(angle) , glm::vec3(1.0f,0.0f,0.0f));
       break;
     case 'y':
-      // do something
+      local_koordinate_system.model = glm::rotate(local_koordinate_system.model,glm::radians(angle) , glm::vec3(0.0f,1.0f,0.0f ));
+      sphere.model = glm::rotate(sphere.model, glm::radians(angle) , glm::vec3(0.0f,1.0f,0.0f) );
       break;
     case 'z':
-      // do something
+      local_koordinate_system.model = glm::rotate(local_koordinate_system.model,glm::radians(angle) , glm::vec3(0.0f,0.0f,1.0f ));
+      sphere.model = glm::rotate(sphere.model, glm::radians(angle), glm::vec3(0.0f,0.0f,1.0f) );
+      break;
+    case 'n':
+      sphere.model = glm::mat4x4(1.0f);
+      local_koordinate_system.model = glm::mat4x4(1.0);
       break;
     case 'r':
-      sphere.model = glm::scale(sphere.model, glm::vec3(0.5f, 0.5f, 0.5f) );
+      if (radius > MIN_RADIUS) {
+        radius -= 1;
+        sphere.model = glm::scale(sphere.model, glm::vec3(0.5f, 0.5f, 0.5f) );
+      }
       break;
     case 'R':
-      sphere.model = glm::scale(sphere.model, glm::vec3(2.0f, 2.0f, 2.0f) );
+      if (radius < MAX_RADIUS){
+        sphere.model = glm::scale(sphere.model, glm::vec3(2.0f, 2.0f, 2.0f) );
+        radius += 1;
+      }
+      break;
+    case 'a':
+      if (zoom < MAX_ZOOM)
+      {
+        eye[2] +=1;
+        zoom += 1.0;
+        view = glm::lookAt(eye, center, up);
+      }
+      break;
+    case 's':
+    if (zoom > MIN_ZOOM)
+    {      
+      eye[2] -= 1;
+      zoom -= 1.0;
+      view = glm::lookAt(eye,center,up);
+    }
       break;
   }
   glutPostRedisplay();
