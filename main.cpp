@@ -35,7 +35,7 @@ const unsigned short MIN_RADIUS = 0;
 
 float zoom = 4.0f;
 const unsigned short MAX_ZOOM = 7;
-const unsigned short MIN_ZOOM = 1;
+const unsigned short MIN_ZOOM = 2;
 
 const float ROTATION_RATE = 10.0f;
 
@@ -146,7 +146,7 @@ void initTesselatedSphere(unsigned short n)
       vertices.push_back(glm::vec3(0.0f, y, 0.0f)); // add vertex
       colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
     } else {
-      if (layer <= (2+n*2) / 2) {
+      if (layer <= (2+n*2) / 2) { // If layer is in the tp half
         for (int i=0; i<layer*4; i++) {
           float angle = 360 * (((float)i) + 1) / (((float)layer) * 4);
           float x = cos(angle * M_PI/180) * sin_remain;
@@ -154,7 +154,7 @@ void initTesselatedSphere(unsigned short n)
           vertices.push_back(glm::vec3(x, y, z)); // add vertex
           colors.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); // add matching color
         }
-      } else {
+      } else { // If layer is in the bottom half
         for (int i=0; i<((2+n*2) - layer)*4; i++) {
           float angle = 360 * (((float)i) + 1) / (((2+n*2) - layer)*4);
           float x = cos(angle * M_PI/180) * sin_remain;
@@ -168,7 +168,7 @@ void initTesselatedSphere(unsigned short n)
 
 
   // Create indices
-  std::vector<int> layerStart;
+  std::vector<int> layerStart; // Indices of the first index per layer
   int currentIndex = 0;
 
   for (int layer = 0; layer <= 2 + n * 2; layer++) {
@@ -182,26 +182,32 @@ void initTesselatedSphere(unsigned short n)
       currentIndex += ((2 + n * 2) - layer) * 4;
   }
 
-  int maxLayer = 2 + n * 2;
+  int maxLayer = 2 + n * 2; // Total number of layers
 
   for (int layer = 0; layer < maxLayer; layer++) {
 
     int currCount; // number of vertices in current layer
     int nextCount; // number of vertices in next layer
 
-    if (layer == 0)
+    if (layer == 0) {
       currCount = 1;
-    else if (layer <= maxLayer / 2)
+    }
+    else if (layer <= maxLayer / 2) {
       currCount = layer * 4;
-    else
+    }
+    else {
       currCount = (maxLayer - layer) * 4;
+    }
 
-    if (layer + 1 == maxLayer)
+    if (layer + 1 == maxLayer) {
       nextCount = 1;
-    else if ((layer + 1) <= maxLayer / 2)
+    }
+    else if ((layer + 1) <= maxLayer / 2) {
       nextCount = (layer + 1) * 4;
-    else
+    }
+    else {
       nextCount = (maxLayer - (layer + 1)) * 4;
+    }
 
     int currStart = layerStart[layer];
     int nextStart = layerStart[layer + 1];
@@ -226,34 +232,29 @@ void initTesselatedSphere(unsigned short n)
       int i = 0;
       int j = 0;
 
-      while (i < currCount && j < nextCount)
-      {
-          int currA = currStart + i % currCount;
-          int currB = currStart + (i + 1) % currCount;
+      while (i < currCount && j < nextCount) {
+        int currA = currStart + i % currCount;
+        int currB = currStart + (i + 1) % currCount;
 
-          int nextA = nextStart + j % nextCount;
-          int nextB = nextStart + (j + 1) % nextCount;
+        int nextA = nextStart + j % nextCount;
+        int nextB = nextStart + (j + 1) % nextCount;
 
-          float currRatio = (float)(i + 1) / currCount;
-          float nextRatio = (float)(j + 1) / nextCount;
+        float currRatio = (float)(i + 1) / currCount;
+        float nextRatio = (float)(j + 1) / nextCount;
 
-          if (
-              (currCount < nextCount && currRatio < nextRatio) ||
-              (currCount > nextCount && currRatio <= nextRatio)
-            )
-          {
-              indices.push_back(currA);
-              indices.push_back(nextA);
-              indices.push_back(currB);
-              i++;
-          }
-          else
-          {
-              indices.push_back(currA);
-              indices.push_back(nextA);
-              indices.push_back(nextB);
-              j++;
-          }
+        if ((currCount < nextCount && currRatio < nextRatio) ||
+            (currCount > nextCount && currRatio <= nextRatio)) {
+          indices.push_back(currA);
+          indices.push_back(nextA);
+          indices.push_back(currB);
+          i++;
+        }
+        else {
+          indices.push_back(currA);
+          indices.push_back(nextA);
+          indices.push_back(nextB);
+          j++;
+        }
       }
     }
   }
