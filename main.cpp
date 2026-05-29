@@ -275,6 +275,86 @@ void updateSphereMesh(int depth) {
   
     glBindVertexArray(0);
 }
+
+void updateSphereMesh_Polar(int depth) {
+    std::vector<glm::vec3> vertices;
+    std::vector<GLushort> indices;
+
+    // Wir passen die Anzahl der Segmente an die Unterteilungstiefe n an.
+    // Bei n=0 wollen wir eine sehr grobe Unterteilung, bei n=4 eine feine.
+    int slices = (depth + 1) * 4; 
+    int stacks = (depth + 1) * 2; 
+    float r = 1.0f; // Kugelradius
+
+    // 1. SCHRITT: Vertices über Polarkoordinaten berechnen
+    for (int stack = 0; stack <= stacks; ++stack) {
+        // phi läuft von 0 bis PI (Nordpol nach Südpol)
+        float phi = M_PI * (float)stack / (float)stacks;
+        float sinPhi = sin(phi);
+        float cosPhi = cos(phi);
+
+        for (int slice = 0; slice <= slices; ++slice) {
+            // theta läuft von 0 bis 2*PI (Einmal ganz herum)
+            float theta = 2.0f * M_PI * (float)slice / (float)slices;
+            float sinTheta = sin(theta);
+            float cosTheta = cos(theta);
+
+            // Umrechnung von Kugelkoordinaten in kartesische XYZ-Koordinaten
+            float x = r * cosTheta * sinPhi;
+            float y = r * cosPhi;
+            float z = r * sinTheta * sinPhi;
+
+            vertices.push_back(glm::vec3(x, y, z));
+        }
+    }
+
+    // 2. SCHRITT: Indizes für die Dreiecke verbinden (Quad-Grid zu Dreiecken spalten)
+    for (int stack = 0; stack < stacks; ++stack) {
+        for (int slice = 0; slice < slices; ++slice) {
+            // Indizes der vier Ecken eines Gitter-Segments berechnen
+            int first  = (stack * (slices + 1)) + slice;
+            int second = first + slices + 1;
+
+            // Jedes Viereck des Gitters wird in 2 Dreiecke zerlegt (CCW-Orientierung!)
+            // Dreieck 1
+            indices.push_back(first);
+            indices.push_back(second);
+            indices.push_back(first + 1);
+
+            // Dreieck 2
+            indices.push_back(first + 1);
+            indices.push_back(second);
+            indices.push_back(second + 1);
+        }
+    }
+
+    // Eine einfarbige, gelbe Kugel generieren
+    std::vector<glm::vec3> colors(vertices.size(), glm::vec3(1.0f, 1.0f, 0.0f));
+
+    // Optional für Aufgabe 2: Normalen sind bei einer Kugel identisch mit den normalisierten Positionen!
+    std::vector<glm::vec3> normals;
+    for (const auto& v : vertices) {
+        normals.push_back(glm::normalize(v));
+    }
+
+    // Globale Index-Anzahl für den Draw-Call speichern
+    sphereIndexCount = indices.size();
+
+    // --- DATEN AN DIE GRAFIKKARTE ÜBERGEBEN ---
+    glBindVertexArray(sphere.vao);
+  
+    glBindBuffer(GL_ARRAY_BUFFER, sphere.positionBuffer);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+  
+    glBindBuffer(GL_ARRAY_BUFFER, sphere.colorBuffer);
+    glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+  
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphere.indexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW);
+  
+    glBindVertexArray(0);
+}
+
 void initSphere() {
     GLuint programId = program.getHandle();
     GLuint pos;
