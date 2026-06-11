@@ -27,12 +27,12 @@ glm::mat4x4 projection;
 float zNear = 0.1f;
 float zFar  = 100.0f;
 
-unsigned short n = 0;
+unsigned short n = 4;
 static const int FPS = 60;
 const float AXIS_LENGTH = 0.75f;
 const float SMA = 1.75f;
 const float MOON_SMA = 0.5f;
-const unsigned int INCLINATION = 45;
+const float INCLINATION = 45.0f;
 
 float phaseAngle = 360.0f;
 float phaseAngleStep = 1.0f;
@@ -91,7 +91,7 @@ void renderSphere(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_TRIANGLES, 1500, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
@@ -107,7 +107,7 @@ void renderLine(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_LINES, 2, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
@@ -381,14 +381,14 @@ void render()
 
   glm::vec3 inclinedPlanetPosition = glm::vec3(glm::cos(glm::radians(phaseAngle)) * SMA, 0.0f, glm::sin(glm::radians(phaseAngle)) * SMA);
   inclinedPlanet.model = glm::translate(glm::mat4x4(1.0f), inclinedPlanetPosition);
-  inclinedPlanet.model = glm::rotate(inclinedPlanet.model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  inclinedPlanet.model = glm::rotate(inclinedPlanet.model, glm::radians(INCLINATION), glm::vec3(0.0f, 0.0f, 1.0f));
   inclinedPlanet.model = glm::rotate(inclinedPlanet.model, glm::radians(phaseAngle*2), glm::vec3(0.0f, 1.0f, 0.0f));
   
   inclinedPlanetAxis.model = glm::translate(glm::mat4x4(1.0f), inclinedPlanetPosition);
-  inclinedPlanetAxis.model = glm::rotate(inclinedPlanetAxis.model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  inclinedPlanetAxis.model = glm::rotate(inclinedPlanetAxis.model, glm::radians(INCLINATION), glm::vec3(0.0f, 0.0f, 1.0f));
   
   inclinedMoon.model = glm::translate(glm::mat4x4(1.0f), inclinedPlanetPosition);
-  inclinedMoon.model = glm::rotate(inclinedMoon.model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  inclinedMoon.model = glm::rotate(inclinedMoon.model, glm::radians(INCLINATION), glm::vec3(0.0f, 0.0f, 1.0f));
   inclinedMoon.model = glm::translate(inclinedMoon.model, glm::vec3(glm::cos(glm::radians(phaseAngle*2)) * MOON_SMA, 0.0f, glm::sin(glm::radians(phaseAngle*2)) * MOON_SMA));
   
   
