@@ -91,7 +91,7 @@ void renderSphere(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_TRIANGLES, 1500, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
@@ -107,7 +107,7 @@ void renderLine(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_LINES, 2, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
