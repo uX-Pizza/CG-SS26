@@ -125,7 +125,7 @@ void glutResize (int width, int height)
 	glViewport(0, 0, width, height);
 
 	// Construct projection matrix.
-	projection = glm::perspective(45.0f, (float) width / height, zNear, zFar);
+	projection = glm::perspective(glm::radians(45.0f), (float) width / height, zNear, zFar);
 }
 
 /*
@@ -199,6 +199,11 @@ int main(int argc, char** argv)
     // GLEW: Load opengl extensions
     glewExperimental = GL_TRUE;
     GLenum result = glewInit();
+
+	// while(glGetError() != GL_NO_ERROR) {}
+	std::cout << "after glew init: "
+			<< glGetError()
+			<< std::endl;
 
     if (result != GLEW_OK) {
        return -1;

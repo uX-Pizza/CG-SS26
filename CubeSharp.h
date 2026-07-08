@@ -75,14 +75,15 @@ namespace cg
 			glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
 			// Color buffer.
-			glGenBuffers(1, &objCube.colorBuffer);
-			glBindBuffer(GL_ARRAY_BUFFER, objCube.colorBuffer);
-			glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
-
-			pos = glGetAttribLocation(programId, "color");
-			glEnableVertexAttribArray(pos);
-			glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
+			// glGenBuffers(1, &objCube.colorBuffer);
+			// glBindBuffer(GL_ARRAY_BUFFER, objCube.colorBuffer);
+			// glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+			
+			// pos = glGetAttribLocation(programId, "color");
+			// std::cout << "color location: " << pos << std::endl;
+			// glEnableVertexAttribArray(pos);
+			// glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+			
 			// Normal buffer.
 			glGenBuffers(1, &objCube.normalBuffer);
 			glBindBuffer(GL_ARRAY_BUFFER, objCube.normalBuffer);
