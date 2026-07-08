@@ -1,4 +1,4 @@
-// #define GLM_ENABLE_EXPERIMENTAL
+#define GLM_ENABLE_EXPERIMENTAL
 
 #include <iostream>
 #include <vector>
@@ -11,7 +11,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
-// #include <glm/gtx/string_cast.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #include "AbstractCube.h"
 #include "CubeSharp.h"
@@ -169,8 +169,8 @@ void glutKeyboard (unsigned char keycode, int x, int y)
 		lightIndex = 1 - lightIndex;
 		cubeLeft ->setLightVector(lights[lightIndex]);
 		cubeRight->setLightVector(lights[lightIndex]);
-		// std::ostringstream os; os << "05 - LightVector " << glm::to_string(lights[lightIndex]) << std::flush;
-		// glutSetWindowTitle(os.str().c_str());
+		std::ostringstream os; os << "05 - LightVector " << glm::to_string(lights[lightIndex]) << std::flush;
+		glutSetWindowTitle(os.str().c_str());
 		break;
 	}
 	case 'n':
