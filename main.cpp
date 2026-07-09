@@ -12,6 +12,9 @@
 #include "GLSLProgram.h"
 #include "GLTools.h"
 
+#include "obj_loader.h"
+
+
 // Standard window width
 const int WINDOW_WIDTH  = 640;
 // Standard window height
@@ -21,7 +24,7 @@ int glutID = 0;
 
 cg::GLSLProgram programSimple;
 cg::GLSLProgram programFlat;
-cg::GLSLProgram programGouraud;
+cg::GLSLProgram programPhong;
 
 glm::mat4x4 view;
 glm::mat4x4 projection;
@@ -35,6 +38,7 @@ const float AXIS_LENGTH = 0.75f;
 const float SMA = 1.75f;
 const float MOON_SMA = 0.5f;
 const float INCLINATION = 45.0f;
+const float NORMALS_LENGTH = 2.0f;
 
 float phaseAngle = 360.0f;
 float phaseAngleStep = 1.0f;
@@ -42,6 +46,8 @@ bool paused = true;
 
 bool wireframe = false;
 bool shaded = false;
+bool normalsInitialized = false;
+bool showNormals = false;
 cg::GLSLProgram currentProgram;
 
 unsigned  lightIndex = 0;
@@ -89,6 +95,8 @@ public:
   glm::vec3 surfKd;
   glm::vec3 surfKs;
   float surfShininess;
+
+  int vertexCount;
   
   glm::mat4x4 model; // model matrix
 };
@@ -103,6 +111,10 @@ Object moon;
 Object inclinedPlanet;
 Object inclinedPlanetAxis;
 Object inclinedMoon;
+
+Object SpaceShip;
+Object SpaceShipNormals;
+
 
 void renderSphere(Object* object)
 {
@@ -119,10 +131,10 @@ void renderSphere(Object* object)
   currentProgram.setUniform("projectionMatrix", projection);
   currentProgram.setUniform("normalMatrix", nm);
 
-  programFlat.setUniform("surfKa", object->surfKa);
-  programFlat.setUniform("surfKd", object->surfKd);
-  programFlat.setUniform("surfKs", object->surfKs);
-  programFlat.setUniform("surfShininess", object->surfShininess);
+  currentProgram.setUniform("surfKa", object->surfKa);
+  currentProgram.setUniform("surfKd", object->surfKd);
+  currentProgram.setUniform("surfKs", object->surfKs);
+  currentProgram.setUniform("surfShininess", object->surfShininess);
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
@@ -142,6 +154,45 @@ void renderLine(Object* object)
   // Bind vertex array object
   glBindVertexArray(object->vao);
   glDrawElements(GL_LINES, 2, GL_UNSIGNED_SHORT, 0);
+  glBindVertexArray(0);
+}
+
+void renderBlenderModel(Object* object)
+{
+  glm::mat4 mv  = view * object->model;
+  // Create mvp.
+  glm::mat4 mvp = projection * mv;
+
+  // Create normal matrix (nm) from model matrix.
+  glm::mat3 nm = glm::inverseTranspose(glm::mat3(mv));
+
+  // Bind the shader program and set uniform(s).
+  currentProgram.use();
+  currentProgram.setUniform("modelviewMatrix",  mv);
+  currentProgram.setUniform("projectionMatrix", projection);
+  currentProgram.setUniform("normalMatrix", nm);
+
+  currentProgram.setUniform("light", lights[lightIndex]);
+  currentProgram.setUniform("lightI", 1.0f);
+  currentProgram.setUniform("surfKa", object->surfKa);
+  currentProgram.setUniform("surfKd", object->surfKd);
+  currentProgram.setUniform("surfKs", object->surfKs);
+  currentProgram.setUniform("surfShininess", object->surfShininess);
+
+  // Bind vertex array object
+  glBindVertexArray(object->vao);
+  glDrawArrays(GL_TRIANGLES, 0, object->vertexCount);
+  glBindVertexArray(0);
+}
+
+void renderNormalLines(Object* object)
+{
+  glm::mat4x4 mvp = projection * view * object->model;
+  programSimple.use();
+  programSimple.setUniform("mvp", mvp);
+
+  glBindVertexArray(object->vao);
+  glDrawArrays(GL_LINES, 0, object->vertexCount);
   glBindVertexArray(0);
 }
 
@@ -375,6 +426,150 @@ void initLine(glm::vec3 p1, glm::vec3 p2, glm::vec3 color, Object* object)
   object->model = glm::mat4(1.0f);
 }
 
+void initSpaceShipNormals(glm::vec3 color, Object* object, CornerList SpaceShipmesh) 
+{
+  if (!SpaceShipmesh.hasNormals) return;
+
+  std::vector<glm::vec3> vertices;
+
+  // Wir laufen durch alle n-Ecke und berechnen die Linien-Punkte im Local Space
+  for (const auto& face : SpaceShipmesh.faces) {
+    for (size_t i = 0; i < face.vertexIndices.size(); ++i) {
+      glm::vec3 p_start = SpaceShipmesh.vertices[face.vertexIndices[i]];
+      glm::vec3 n_dir = SpaceShipmesh.normals[face.normalIndices[i]];
+      
+      // Hinweis: 2.0f (deine Konstante) ist oft riesig für Normalen. 
+      // Wenn die Linien zu lang sind, nimm hier lieber 0.1f oder 0.2f.
+      glm::vec3 p_end = p_start + n_dir * NORMALS_LENGTH; 
+
+      vertices.push_back(p_start);
+      vertices.push_back(p_end);
+    }
+  }
+
+  object->vertexCount = vertices.size();
+  std::vector<glm::vec3> colors(vertices.size(), color);
+
+  GLuint programId = programSimple.getHandle();
+  GLuint pos;
+
+  glGenVertexArrays(1, &object->vao);
+  glBindVertexArray(object->vao);
+  
+  // Positionen in den VBO laden
+  glGenBuffers(1, &object->positionBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->positionBuffer);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+  pos = glGetAttribLocation(programId, "position");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  // Farben in den VBO laden
+  glGenBuffers(1, &object->colorBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->colorBuffer);
+  glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+  pos = glGetAttribLocation(programId, "color");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  glBindVertexArray(0);
+  object->model = glm::mat4(1.0f);
+
+  normalsInitialized = true;
+}
+
+void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
+{
+  std::vector<glm::vec3> vertices = {};
+  std::vector<glm::vec3> normals = {};
+  CornerList SpaceShipMesh;
+
+  object->surfKa = glm::vec3(0.1f, 0.1f, 0.1f);
+  object->surfKd = glm::vec3(0.5f, 0.5f, 0.5f);
+  object->surfKs = glm::vec3(1.0f,1.0f,1.0f);
+  object->surfShininess = 7.0f;
+ 
+  if (!loadOBJ(path, SpaceShipMesh)) {
+	return;
+	}
+
+  //Triangulierung der n-Ecke aus der Eckenliste
+  for (const auto& face : SpaceShipMesh.faces) {
+	size_t n = face.vertexIndices.size();
+	if (n < 3) continue; //mindestens 3 Ecken
+
+    // Fächer-Triangulierung:
+    // Ein n-Eck wird in (n-2) Dreiecke zerlegt.
+    for (size_t i = 1; i < n - 1; ++i) {
+	  // Wir holen die echten 3D-Koordinaten aus den globalen Positions anhand der Indizes
+      glm::vec3 p0 = SpaceShipMesh.vertices[face.vertexIndices[0]];
+      glm::vec3 p1 = SpaceShipMesh.vertices[face.vertexIndices[i]];
+	  glm::vec3 p2 = SpaceShipMesh.vertices[face.vertexIndices[i + 1]];
+
+	  // Diese 3 Punkte bilden ein Dreieck zum zeichnen
+      glm::vec3 n0 = SpaceShipMesh.normals[face.normalIndices[0]];
+	  glm::vec3 n1 = SpaceShipMesh.normals[face.normalIndices[i]];
+	  glm::vec3 n2 = SpaceShipMesh.normals[face.normalIndices[i + 1]];
+
+	  vertices.push_back(p0);
+	  vertices.push_back(p1);
+	  vertices.push_back(p2);
+
+	  normals.push_back(glm::normalize(n0));
+	  normals.push_back(glm::normalize(n1));
+	  normals.push_back(glm::normalize(n2));
+    }
+  }
+
+//   for (const glm::vec3 normal : SpaceShipMesh.normals) {
+// 	normals.push_back(glm::normalize(normal));
+//   }
+
+  // hasNormals = SpaceShipMesh.hasNormals;
+  //Anzahl der Punkte zum zeichnen
+  object->vertexCount = vertices.size();
+
+  //Jeder Punkte bekommt eine Farbe
+  std::vector<glm::vec3> colors(vertices.size(), modelColor);
+  
+  GLuint programId = currentProgram.getHandle();
+  GLuint pos;
+
+  glGenVertexArrays(1, &object->vao);
+  glBindVertexArray(object->vao);
+
+  // Positionen an die Grafikkarte schicken
+  glGenBuffers(1, &object->positionBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->positionBuffer);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+  pos = glGetAttribLocation(programId, "position");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+  // Farben an die Grafikkarte schicken
+  glGenBuffers(1, &object->colorBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->colorBuffer);
+  glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+  pos = glGetAttribLocation(programId, "color");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+  glGenBuffers(1, &object->normalBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->normalBuffer);
+  glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), normals.data(), GL_STATIC_DRAW);
+
+  pos = glGetAttribLocation(programId, "normal");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+  glBindVertexArray(0);
+  object->model = glm::mat4(1.0f);
+
+  if (SpaceShipMesh.hasNormals) {
+    initSpaceShipNormals(glm::vec3(1.0f, 0.0f, 0.0f), &SpaceShipNormals, SpaceShipMesh);
+  }
+}
+
 /*
  Initialization. Should return true if everything is ok and false if something went wrong.
  */
@@ -422,31 +617,31 @@ bool init()
     return false;
   }
 
-  if (!programGouraud.compileShaderFromFile("shader/shadedPhong.vert", cg::GLSLShader::VERTEX)) {
-    std::cerr << programGouraud.log();
+  if (!programPhong.compileShaderFromFile("shader/shadedPhong.vert", cg::GLSLShader::VERTEX)) {
+    std::cerr << programPhong.log();
     return false;
   }
 
-  if (!programGouraud.compileShaderFromFile("shader/shadedPhong.frag", cg::GLSLShader::FRAGMENT)) {
-    std::cerr << programGouraud.log();
+  if (!programPhong.compileShaderFromFile("shader/shadedPhong.frag", cg::GLSLShader::FRAGMENT)) {
+    std::cerr << programPhong.log();
     return false;
   }
 
-  if (!programGouraud.link()) {
-    std::cerr << programGouraud.log();
+  if (!programPhong.link()) {
+    std::cerr << programPhong.log();
     return false;
   }
 
   currentProgram = programFlat;
 
 
-  programGouraud.use();
-  programGouraud.setUniform("light",  lights[lightIndex]);
-  programGouraud.setUniform("lightI", float(1.0f));
-  programGouraud.setUniform("surfKa", glm::vec3(0.1f, 0.1f, 0.1f));
-  programGouraud.setUniform("surfKd", glm::vec3(0.8f, 0.1f, 0.1f));
-  programGouraud.setUniform("surfKs", glm::vec3(1, 1, 1));
-  programGouraud.setUniform("surfShininess", float(8.0f));
+  programPhong.use();
+  programPhong.setUniform("light",  lights[lightIndex]);
+  programPhong.setUniform("lightI", float(1.0f));
+  programPhong.setUniform("surfKa", glm::vec3(0.1f, 0.1f, 0.1f));
+  programPhong.setUniform("surfKd", glm::vec3(0.8f, 0.1f, 0.1f));
+  programPhong.setUniform("surfKs", glm::vec3(1, 1, 1));
+  programPhong.setUniform("surfShininess", float(8.0f));
 
   programFlat.use();
   programFlat.setUniform("light", lights[lightIndex]);
@@ -467,6 +662,9 @@ bool init()
   initTesselatedSphere(n, 0.15f, glm::vec3(0.0f, 0.0f, 1.0f), &planet, glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.8f, 0.1f, 0.1f), glm::vec3(1.0f,1.0f,1.0f), 8.0f);
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), &planetAxis);
   initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &moon, glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.8f, 0.8f, 0.8f), glm::vec3(0.5f,0.5f,0.5f), 10.0f);
+
+  initBlenderModel("objects/triangulated-CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
+  //initBlenderModel("objects/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
 
   return true;
 }
@@ -517,6 +715,40 @@ void render()
   renderSphere(&planet);
   renderLine(&planetAxis);
   renderSphere(&moon);
+
+  //SpaceShip
+  float shipOrbitRadius = 2.0f; //Entfernung zur Sonne
+  float shipSpeed = phaseAngle + 90; //Position
+
+
+  glm::vec3 shipPosition = glm::vec3(
+      glm::cos(glm::radians(shipSpeed)) * shipOrbitRadius,
+      0.0f, // Y Position
+      glm::sin(glm::radians(shipSpeed)) * shipOrbitRadius
+  );
+
+  //Matrix zurücksetzen
+  SpaceShip.model = glm::mat4x4(1.0f);
+
+  //Schiff neu positionieren
+  SpaceShip.model = glm::translate(SpaceShip.model, shipPosition);
+
+  //Schiff auf der Bahn drehen
+  SpaceShip.model = glm::rotate(SpaceShip.model, glm::radians(shipSpeed * -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  //Schiff um sich selbst drehen
+  SpaceShip.model = glm::rotate(SpaceShip.model, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  //Schiff kleiner machen
+  SpaceShip.model = glm::scale(SpaceShip.model, glm::vec3(0.05f, 0.05f, 0.05f));
+
+  // 4. Zeichnen
+  renderBlenderModel(&SpaceShip);
+
+  if (showNormals && normalsInitialized){
+    SpaceShipNormals.model = SpaceShip.model;
+    renderNormalLines(&SpaceShipNormals);
+  }
 }
 
 void glutDisplay ()
@@ -585,7 +817,7 @@ void glutKeyboard (unsigned char keycode, int x, int y)
   case 's':
     shaded = !shaded;
 	if (shaded) {
-		currentProgram = programGouraud;
+		currentProgram = programPhong;
 	} else {
 		currentProgram = programFlat;
 	}
@@ -596,9 +828,11 @@ void glutKeyboard (unsigned char keycode, int x, int y)
 	programFlat.use();
 	programFlat.setUniform("light", lights[lightIndex]);
 
-	programGouraud.use();
-	programGouraud.setUniform("light", lights[lightIndex]);
+	programPhong.use();
+	programPhong.setUniform("light", lights[lightIndex]);
 	break;
+  case 'n':
+	showNormals = !showNormals;
   }
   glutPostRedisplay();
 }
