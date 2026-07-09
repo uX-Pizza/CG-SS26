@@ -436,7 +436,7 @@ bool init()
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), &planetAxis);
   initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &moon);
 
-  initBlenderModel("../../3dModel/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
+  initBlenderModel("3dModel/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
   
   return true;
 }

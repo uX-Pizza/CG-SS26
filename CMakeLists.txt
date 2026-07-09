@@ -38,3 +38,6 @@ target_link_libraries(Blatt03 ${OPENGL_LIBRARIES} libglut.a libglew.a)
 # copy the shader directory relative to the executable
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/3dModel
+      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

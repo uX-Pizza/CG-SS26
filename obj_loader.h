@@ -27,7 +27,7 @@ bool loadOBJ(
 	// sonst existiert 'file' gar nicht.
 	std::ifstream file(path);
 	if (!file.is_open()) {
-		std::cerr << "Fehler: Konnte Datei nicht oeffnen: " << path << "\n";
+		std::cerr << "Fehler: Konnte Datei nicht öffnen: " << path << "\n";
 		return false;
 	}
 
