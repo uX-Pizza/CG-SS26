@@ -19,7 +19,9 @@ const int WINDOW_HEIGHT = 480;
 // GLUT window id/handle
 int glutID = 0;
 
-cg::GLSLProgram program;
+cg::GLSLProgram programSimple;
+cg::GLSLProgram programFlat;
+cg::GLSLProgram programGouraud;
 
 glm::mat4x4 view;
 glm::mat4x4 projection;
@@ -39,6 +41,14 @@ float phaseAngleStep = 1.0f;
 bool paused = true;
 
 bool wireframe = false;
+bool shaded = false;
+cg::GLSLProgram currentProgram;
+
+unsigned  lightIndex = 0;
+glm::vec4 lights[2] = {
+	{ 0.0f, 1.0f, 0.0f, 0.0f },
+	{ 0.0f, 0.0f, 4.0f, 1.0f }
+};
 
 
 /*
@@ -51,13 +61,19 @@ public:
     : vao(0),
       positionBuffer(0),
       colorBuffer(0),
-      indexBuffer(0)
+      indexBuffer(0),
+	  normalBuffer(0),
+	  surfKa(0),
+	  surfKd(0),
+	  surfKs(0),
+	  surfShininess(0)
   {}
 
   inline ~Object () { // GL context must exist on destruction
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &indexBuffer);
     glDeleteBuffers(1, &colorBuffer);
+	glDeleteBuffers(1, &normalBuffer);
     glDeleteBuffers(1, &positionBuffer);
   }
 
@@ -65,8 +81,14 @@ public:
   
   GLuint positionBuffer; // ID of vertex-buffer: position
   GLuint colorBuffer;    // ID of vertex-buffer: color
+  GLuint normalBuffer;
   
   GLuint indexBuffer;    // ID of index-buffer
+
+  glm::vec3 surfKa;
+  glm::vec3 surfKd;
+  glm::vec3 surfKs;
+  float surfShininess;
   
   glm::mat4x4 model; // model matrix
 };
@@ -84,12 +106,23 @@ Object inclinedMoon;
 
 void renderSphere(Object* object)
 {
+  glm::mat4 mv  = view * object->model;
   // Create mvp.
-  glm::mat4x4 mvp = projection * view * object->model;
+  glm::mat4 mvp = projection * mv;
+
+  // Create normal matrix (nm) from model matrix.
+  glm::mat3 nm = glm::inverseTranspose(glm::mat3(mv));
 
   // Bind the shader program and set uniform(s).
-  program.use();
-  program.setUniform("mvp", mvp);
+  currentProgram.use();
+  currentProgram.setUniform("modelviewMatrix",  mv);
+  currentProgram.setUniform("projectionMatrix", projection);
+  currentProgram.setUniform("normalMatrix", nm);
+
+  programFlat.setUniform("surfKa", object->surfKa);
+  programFlat.setUniform("surfKd", object->surfKd);
+  programFlat.setUniform("surfKs", object->surfKs);
+  programFlat.setUniform("surfShininess", object->surfShininess);
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
@@ -103,8 +136,8 @@ void renderLine(Object* object)
   glm::mat4x4 mvp = projection * view * object->model;
 
   // Bind the shader program and set uniform(s).
-  program.use();
-  program.setUniform("mvp", mvp);
+  programSimple.use();
+  programSimple.setUniform("mvp", mvp);
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
@@ -112,10 +145,16 @@ void renderLine(Object* object)
   glBindVertexArray(0);
 }
 
-void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Object* object)
+void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Object* object, glm::vec3 ka, glm::vec3 kd, glm::vec3 ks, float surfShininess)
 {
+  object->surfKa = ka;
+  object->surfKd = kd;
+  object->surfKs = ks;
+  object->surfShininess = surfShininess;
+
   std::vector<glm::vec3> vertices = {};
   std::vector<glm::vec3> colors = {};
+  std::vector<glm::vec3> normals = {};
   std::vector<GLushort> indices = {};
   
   // Create vertices
@@ -125,6 +164,7 @@ void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Objec
 
     if (layer == 0 || layer == 2+n*2) { // if current layer is the first or last layer
       vertices.push_back(glm::vec3(0.0f, y, 0.0f)); // add vertex
+	  normals.push_back(glm::normalize(glm::vec3(0.0f, y, 0.0f))); // add normal
       colors.push_back(color); // add matching color
     } else {
       if (layer <= (2+n*2) / 2) { // If layer is in the tp half
@@ -133,6 +173,7 @@ void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Objec
           float x = cos(angle * M_PI/180) * sin_remain;
           float z = sin(angle * M_PI/180) * sin_remain;
           vertices.push_back(glm::vec3(x, y, z)); // add vertex
+		  normals.push_back(glm::normalize(glm::vec3(x, y, z))); // add normal
           colors.push_back(color); // add matching color
         }
       } else { // If layer is in the bottom half
@@ -141,6 +182,7 @@ void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Objec
           float x = cos(angle * M_PI/180) * sin_remain;
           float z = sin(angle * M_PI/180) * sin_remain;
           vertices.push_back(glm::vec3(x, y, z)); // add vertex
+          normals.push_back(glm::normalize(glm::vec3(x, y, z))); // add normal
           colors.push_back(color); // add matching color
         }
       }
@@ -213,7 +255,7 @@ void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Objec
       int i = 0;
       int j = 0;
 
-      while (i < currCount && j < nextCount) {
+      while (i <= currCount && j <= nextCount) {
         int currA = currStart + i % currCount;
         int currB = currStart + (i + 1) % currCount;
 
@@ -242,7 +284,7 @@ void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Objec
 
 
   // Sphere object
-  GLuint programId = program.getHandle();
+  GLuint programId = currentProgram.getHandle();
   GLuint pos;
 
   // Step 0: Create vertex array object.
@@ -268,6 +310,14 @@ void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Objec
   pos = glGetAttribLocation(programId, "color");
   glEnableVertexAttribArray(pos);
   glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+  glGenBuffers(1, &object->normalBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->normalBuffer);
+  glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), normals.data(), GL_STATIC_DRAW);
+
+  pos = glGetAttribLocation(programId, "normal");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
   
   // Step 3: Create vertex buffer object for indices. No binding needed here.
   glGenBuffers(1, &object->indexBuffer);
@@ -287,7 +337,7 @@ void initLine(glm::vec3 p1, glm::vec3 p2, glm::vec3 color, Object* object)
   std::vector<GLushort> indices = {0, 1};
 
   // Sphere object
-  GLuint programId = program.getHandle();
+  GLuint programId = programSimple.getHandle();
   GLuint pos;
 
   // Step 0: Create vertex array object.
@@ -342,32 +392,81 @@ bool init()
   view = glm::lookAt(eye, center, up);
   
   // Create a shader program and set light direction.
-  if (!program.compileShaderFromFile("shader/simple.vert", cg::GLSLShader::VERTEX)) {
-    std::cerr << program.log();
+  if (!programSimple.compileShaderFromFile("shader/simple.vert", cg::GLSLShader::VERTEX)) {
+    std::cerr << programSimple.log();
     return false;
   }
   
-  if (!program.compileShaderFromFile("shader/simple.frag", cg::GLSLShader::FRAGMENT)) {
-    std::cerr << program.log();
+  if (!programSimple.compileShaderFromFile("shader/simple.frag", cg::GLSLShader::FRAGMENT)) {
+    std::cerr << programSimple.log();
+    return false;
+  }
+
+  if (!programSimple.link()) {
+    std::cerr << programSimple.log();
+    return false;
+  }
+
+  if (!programFlat.compileShaderFromFile("shader/shadedGouraud.vert", cg::GLSLShader::VERTEX)) {
+    std::cerr << programFlat.log();
     return false;
   }
   
-  if (!program.link()) {
-    std::cerr << program.log();
+  if (!programFlat.compileShaderFromFile("shader/shadedGouraud.frag", cg::GLSLShader::FRAGMENT)) {
+    std::cerr << programFlat.log();
     return false;
   }
+
+  if (!programFlat.link()) {
+    std::cerr << programFlat.log();
+    return false;
+  }
+
+  if (!programGouraud.compileShaderFromFile("shader/shadedPhong.vert", cg::GLSLShader::VERTEX)) {
+    std::cerr << programGouraud.log();
+    return false;
+  }
+
+  if (!programGouraud.compileShaderFromFile("shader/shadedPhong.frag", cg::GLSLShader::FRAGMENT)) {
+    std::cerr << programGouraud.log();
+    return false;
+  }
+
+  if (!programGouraud.link()) {
+    std::cerr << programGouraud.log();
+    return false;
+  }
+
+  currentProgram = programFlat;
+
+
+  programGouraud.use();
+  programGouraud.setUniform("light",  lights[lightIndex]);
+  programGouraud.setUniform("lightI", float(1.0f));
+  programGouraud.setUniform("surfKa", glm::vec3(0.1f, 0.1f, 0.1f));
+  programGouraud.setUniform("surfKd", glm::vec3(0.8f, 0.1f, 0.1f));
+  programGouraud.setUniform("surfKs", glm::vec3(1, 1, 1));
+  programGouraud.setUniform("surfShininess", float(8.0f));
+
+  programFlat.use();
+  programFlat.setUniform("light", lights[lightIndex]);
+  programFlat.setUniform("lightI", float(1.0f));
+  programFlat.setUniform("surfKa", glm::vec3(0.1f,0.1f,0.1f));
+  programFlat.setUniform("surfKd", glm::vec3(0.8f,0.8f,0.8f));
+  programFlat.setUniform("surfKs", glm::vec3(1.0f,1.0f,1.0f));
+  programFlat.setUniform("surfShininess", float(8.0f));
 
   // Create all objects.
-  initTesselatedSphere(n, 0.3f, glm::vec3(1.0f, 1.0f, 0.0f), &sun);
+  initTesselatedSphere(n, 0.3f, glm::vec3(1.0f, 1.0f, 0.0f), &sun , glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.3f,0.3f,0.3f), 8.0f);
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), &sunAxis);
 
-  initTesselatedSphere(n, 0.15f, glm::vec3(0.0f, 0.0f, 1.0f), &inclinedPlanet);
+  initTesselatedSphere(n, 0.15f, glm::vec3(0.0f, 0.0f, 1.0f), &inclinedPlanet, glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.1f, 0.1f, 0.8f), glm::vec3(1.0f,1.0f,1.0f), 8.0f);
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), &inclinedPlanetAxis);
-  initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &inclinedMoon);
+  initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &inclinedMoon, glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.8f, 0.8f, 0.8f), glm::vec3(0.5f,0.5f,0.5f), 10.0f);
 
-  initTesselatedSphere(n, 0.15f, glm::vec3(0.0f, 0.0f, 1.0f), &planet);
+  initTesselatedSphere(n, 0.15f, glm::vec3(0.0f, 0.0f, 1.0f), &planet, glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.8f, 0.1f, 0.1f), glm::vec3(1.0f,1.0f,1.0f), 8.0f);
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), &planetAxis);
-  initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &moon);
+  initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &moon, glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.8f, 0.8f, 0.8f), glm::vec3(0.5f,0.5f,0.5f), 10.0f);
 
   return true;
 }
@@ -482,6 +581,24 @@ void glutKeyboard (unsigned char keycode, int x, int y)
     break;
   case 'w':
 	wireframe = !wireframe;
+	break;
+  case 's':
+    shaded = !shaded;
+	if (shaded) {
+		currentProgram = programGouraud;
+	} else {
+		currentProgram = programFlat;
+	}
+	break;
+  case 'l':
+  	lightIndex = 1 - lightIndex;
+
+	programFlat.use();
+	programFlat.setUniform("light", lights[lightIndex]);
+
+	programGouraud.use();
+	programGouraud.setUniform("light", lights[lightIndex]);
+	break;
   }
   glutPostRedisplay();
 }
