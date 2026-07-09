@@ -44,6 +44,7 @@ bool paused = true;
 
 bool hasNormals = false;
 bool showNormals = false; // Steuert, ob die Normalen gezeichnet werden sollen
+bool boxVisibile = true;
 
 
 /*
@@ -91,6 +92,7 @@ Object inclinedMoon;
 
 Object SpaceShip;
 Object SpaceShipNormals;
+Object SpaceShipBox;
 
 EdgesList SpaceShipMesh;
 
@@ -445,10 +447,70 @@ void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
     glBindVertexArray(0);
     object->model = glm::mat4(1.0f);
     
-    // ZUSATZ-TIPP für die Normalen-Anforderung:
-    // Du solltest im 'Object'-Struct eine Variable 'bool hatNormalen;' hinzufügen,
-    // damit du sie hier für die spätere Tastaturabfrage speichern kannst:
-    // object->hatNormalen = SpaceShipMesh.hasNormals;
+    //BoundingBox
+    if (!SpaceShipMesh.vertices.empty()) {
+        // Starte mit den Werten des allerersten Punktes
+        float minX = SpaceShipMesh.vertices[0].x, maxX = SpaceShipMesh.vertices[0].x;
+        float minY = SpaceShipMesh.vertices[0].y, maxY = SpaceShipMesh.vertices[0].y;
+        float minZ = SpaceShipMesh.vertices[0].z, maxZ = SpaceShipMesh.vertices[0].z;
+
+        // Durchlaufe alle Vertices, um die absoluten Minima und Maxima zu finden
+        for (const auto& v : SpaceShipMesh.vertices) {
+            if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+            if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+            if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
+        }
+
+        // Aus den 6 Werten bauen wir die 8 Eckpunkte der Box
+        glm::vec3 c0(minX, minY, minZ);
+        glm::vec3 c1(maxX, minY, minZ);
+        glm::vec3 c2(maxX, maxY, minZ);
+        glm::vec3 c3(minX, maxY, minZ);
+        glm::vec3 c4(minX, minY, maxZ);
+        glm::vec3 c5(maxX, minY, maxZ);
+        glm::vec3 c6(maxX, maxY, maxZ);
+        glm::vec3 c7(minX, maxY, maxZ);
+
+        // Jetzt definieren wir die 12 Kanten (Linien) der Box.
+        // Für GL_LINES brauchen wir immer Paare: Startpunkt, Endpunkt.
+        std::vector<glm::vec3> boxVertices = {
+            // Unterer Ring
+            c0, c1,  c1, c5,  c5, c4,  c4, c0,
+            // Oberer Ring
+            c3, c2,  c2, c6,  c6, c7,  c7, c3,
+            // Vertikale Säulen, die oben und unten verbinden
+            c0, c3,  c1, c2,  c5, c6,  c4, c7
+        };
+
+        // Weise dem Box-Objekt die Anzahl der Punkte zu (12 Linien * 2 Punkte = 24)
+        SpaceShipBox.vertexCount = boxVertices.size();
+
+        // Farbe für die Bounding Box (z.B. ein auffälliges Weiß oder Rot)
+        std::vector<glm::vec3> boxColors(boxVertices.size(), glm::vec3(1.0f, 1.0f, 1.0f));
+
+        // OpenGL-Buffer für die Box erstellen
+        glGenVertexArrays(1, &SpaceShipBox.vao);
+        glBindVertexArray(SpaceShipBox.vao);
+
+        // Positions-Buffer
+        glGenBuffers(1, &SpaceShipBox.positionBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, SpaceShipBox.positionBuffer);
+        glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(glm::vec3), boxVertices.data(), GL_STATIC_DRAW);
+        pos = glGetAttribLocation(programId, "position");
+        glEnableVertexAttribArray(pos);
+        glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+        // Farben-Buffer
+        glGenBuffers(1, &SpaceShipBox.colorBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, SpaceShipBox.colorBuffer);
+        glBufferData(GL_ARRAY_BUFFER, boxColors.size() * sizeof(glm::vec3), boxColors.data(), GL_STATIC_DRAW);
+        pos = glGetAttribLocation(programId, "color");
+        glEnableVertexAttribArray(pos);
+        glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+        glBindVertexArray(0);
+        SpaceShipBox.model = glm::mat4(1.0f);
+    }
 
 }
 
@@ -606,6 +668,11 @@ void render()
     SpaceShipNormals.model = SpaceShip.model;
     renderNormalLines(&SpaceShipNormals);
   }
+  if (boxVisibile == true){
+    SpaceShipBox.model = SpaceShip.model;
+    renderNormalLines(&SpaceShipBox);
+  }
+
 }
 
 void glutDisplay ()
@@ -675,7 +742,12 @@ void glutKeyboard (unsigned char keycode, int x, int y)
     }
     showNormals = !showNormals;
     break;
+  case 'b':
+    boxVisibile = !boxVisibile;
+    break;
   }
+
+
   glutPostRedisplay();
 }
 
