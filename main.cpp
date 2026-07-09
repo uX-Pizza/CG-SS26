@@ -539,6 +539,17 @@ void renderNormalLines(Object* object)
   glBindVertexArray(0);
 }
 
+void renderBoundingBox(Object* object)
+{
+  glm::mat4x4 mvp = projection * view * object->model;
+  program.use();
+  program.setUniform("mvp", mvp);
+
+  glBindVertexArray(object->vao);
+  glDrawArrays(GL_LINES, 0, object->vertexCount);
+  glBindVertexArray(0);
+}
+
 /*
  Initialization. Should return true if everything is ok and false if something went wrong.
  */
@@ -670,7 +681,7 @@ void render()
   }
   if (boxVisibile == true){
     SpaceShipBox.model = SpaceShip.model;
-    renderNormalLines(&SpaceShipBox);
+    renderBoundingBox(&SpaceShipBox);
   }
 
 }
