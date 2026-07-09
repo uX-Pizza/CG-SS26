@@ -325,6 +325,68 @@ void initLine(glm::vec3 p1, glm::vec3 p2, glm::vec3 color, Object* object)
   object->model = glm::mat4(1.0f);
 }
 
+void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
+{
+    std::vector<glm::vec3> vertices;
+    std::vector<glm::vec2> uvs;
+    std::vector<glm::vec3> normals;
+
+    // Lade die Daten aus der Datei
+    if (!loadOBJ(path, vertices, uvs, normals)) {
+        return; // Wenn Datei nicht gefunden, brich ab
+    }
+
+    // Speichere, wie viele Punkte wir zeichnen müssen
+    object->vertexCount = vertices.size();
+
+    // Mache für jeden Punkt eine Farbe, damit dein Shader glücklich ist
+    std::vector<glm::vec3> colors(vertices.size(), modelColor);
+
+    GLuint programId = program.getHandle();
+    GLuint pos;
+
+    glGenVertexArrays(1, &object->vao);
+    glBindVertexArray(object->vao);
+
+    // Positionen an die Grafikkarte schicken
+    glGenBuffers(1, &object->positionBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, object->positionBuffer);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+    pos = glGetAttribLocation(programId, "position");
+    glEnableVertexAttribArray(pos);
+    glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    // Farben an die Grafikkarte schicken
+    glGenBuffers(1, &object->colorBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, object->colorBuffer);
+    glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+    pos = glGetAttribLocation(programId, "color");
+    glEnableVertexAttribArray(pos);
+    glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    // Wir brauchen hier keinen IndexBuffer!
+
+    glBindVertexArray(0);
+    object->model = glm::mat4(1.0f);
+}
+
+void renderBlenderModel(Object* object)
+{
+    glm::mat4x4 mvp = projection * view * object->model;
+    program.use();
+    program.setUniform("mvp", mvp);
+
+    glBindVertexArray(object->vao);
+
+    // Wenn du es als Drahtgittermodell sehen willst, entkommentiere die nächste Zeile:
+    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); 
+
+    // Wir nutzen hier glDrawArrays (weil keine Indices) und die gespeicherte vertexCount!
+    glDrawArrays(GL_TRIANGLES, 0, object->vertexCount);
+
+    glBindVertexArray(0);
+}
+
 /*
  Initialization. Should return true if everything is ok and false if something went wrong.
  */
@@ -369,6 +431,8 @@ bool init()
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), &planetAxis);
   initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &moon);
 
+  initBlenderModel("C:/Users/micha/Documents/Uni/ComputerGrafik/Beleuchtung_UB05/3dModel/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
+  
   return true;
 }
 
@@ -412,6 +476,33 @@ void render()
   renderSphere(&planet);
   renderLine(&planetAxis);
   renderSphere(&moon);
+
+
+  //SpaceShip
+  float shipOrbitRadius = 2.0f; //Entfernung zur Sonne
+  float shipSpeed = phaseAngle + 90; //Position
+
+
+  glm::vec3 shipPosition = glm::vec3(
+      glm::cos(glm::radians(shipSpeed)) * shipOrbitRadius,
+      0.2f, // Y = 0.2f lässt das Schiff etwas "über" der Äquatorebene schweben
+      glm::sin(glm::radians(shipSpeed)) * shipOrbitRadius
+  );
+
+  SpaceShip.model = glm::mat4x4(1.0f);
+
+  SpaceShip.model = glm::translate(SpaceShip.model, shipPosition);
+
+  // B: Dann rotieren. Hier drehen wir das Schiff um seine eigene Y-Achse (Eigenrotation)
+  // Wenn dein Schiff vorwärts fliegen soll, musst du hier evtl. den Winkel anpassen
+  SpaceShip.model = glm::rotate(SpaceShip.model, glm::radians(shipSpeed * -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  // C: Am Schluss skalieren! Blender-Modelle brauchen oft extreme Werte. 
+  // Wenn es immer noch zu groß ist, probiere 0.005f. Wenn es weg ist, probiere 0.05f.
+  SpaceShip.model = glm::scale(SpaceShip.model, glm::vec3(0.05f, 0.05f, 0.05f));
+
+  // 4. Zeichnen
+  renderBlenderModel(&SpaceShip);
 }
 
 void glutDisplay ()
