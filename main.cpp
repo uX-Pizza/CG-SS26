@@ -29,6 +29,8 @@ glm::mat4x4 projection;
 float zNear = 0.1f;
 float zFar  = 100.0f;
 
+const float normalLength = 2;
+
 unsigned short n = 4;
 static const int FPS = 60;
 const float AXIS_LENGTH = 0.75f;
@@ -39,6 +41,9 @@ const float INCLINATION = 45.0f;
 float phaseAngle = 360.0f;
 float phaseAngleStep = 1.0f;
 bool paused = true;
+
+bool hasNormals = false;
+bool showNormals = false; // Steuert, ob die Normalen gezeichnet werden sollen
 
 
 /*
@@ -83,7 +88,11 @@ Object moon;
 Object inclinedPlanet;
 Object inclinedPlanetAxis;
 Object inclinedMoon;
+
 Object SpaceShip;
+Object SpaceShipNormals;
+
+EdgesList SpaceShipMesh;
 
 void renderSphere(Object* object)
 {
@@ -96,7 +105,6 @@ void renderSphere(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_TRIANGLES, 1500, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
@@ -112,7 +120,6 @@ void renderLine(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_LINES, 2, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
@@ -330,21 +337,87 @@ void initLine(glm::vec3 p1, glm::vec3 p2, glm::vec3 color, Object* object)
   object->model = glm::mat4(1.0f);
 }
 
+void initSpaceShipNormals(glm::vec3 color, Object* object, EdgesList SpaceShipmesh) 
+{
+  std::vector<glm::vec3> vertices;
+
+// Wir laufen durch alle n-Ecke und berechnen die Linien-Punkte im Local Space
+  for (const auto& face : SpaceShipmesh.faces) {
+    for (size_t i = 0; i < face.vertexIndices.size(); ++i) {
+      glm::vec3 p_start = SpaceShipmesh.vertices[face.vertexIndices[i]];
+      glm::vec3 n_dir = SpaceShipmesh.normals[face.normalIndices[i]];
+      
+      // Hinweis: 2.0f (deine Konstante) ist oft riesig für Normalen. 
+      // Wenn die Linien zu lang sind, nimm hier lieber 0.1f oder 0.2f.
+      glm::vec3 p_end = p_start + n_dir * normalLength; 
+
+      vertices.push_back(p_start);
+      vertices.push_back(p_end);
+    }
+  }
+
+  object->vertexCount = vertices.size();
+  std::vector<glm::vec3> colors(vertices.size(), color);
+
+  GLuint programId = program.getHandle();
+  GLuint pos;
+
+  glGenVertexArrays(1, &object->vao);
+  glBindVertexArray(object->vao);
+  
+  // Positionen in den VBO laden
+  glGenBuffers(1, &object->positionBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->positionBuffer);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+  pos = glGetAttribLocation(programId, "position");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  // Farben in den VBO laden
+  glGenBuffers(1, &object->colorBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, object->colorBuffer);
+  glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+  pos = glGetAttribLocation(programId, "color");
+  glEnableVertexAttribArray(pos);
+  glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  
+  glBindVertexArray(0);
+  object->model = glm::mat4(1.0f);
+}
+
 void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
 {
-    std::vector<glm::vec3> vertices;
-    std::vector<glm::vec2> uvs;
-    std::vector<glm::vec3> normals;
-
-    // Lade die Daten aus der Datei
-    if (!loadOBJ(path, vertices, uvs, normals)) {
-        return; // Wenn Datei nicht gefunden, brich ab
+    std::vector<glm::vec3> vertices; 
+ 
+    if (!loadOBJ(path, SpaceShipMesh)) {
+        return;
     }
 
-    // Speichere, wie viele Punkte wir zeichnen müssen
+    //Triangulierung der n-Ecke aus der Eckenliste
+    for (const auto& face : SpaceShipMesh.faces) {
+        size_t n = face.vertexIndices.size();
+        if (n < 3) continue; //mindestens 3 Ecken
+
+        // Fächer-Triangulierung (Fan Triangulation):
+        // Ein n-Eck wird in (n-2) Dreiecke zerlegt.
+        for (size_t i = 1; i < n - 1; ++i) {
+            // Wir holen die echten 3D-Koordinaten aus den globalen Positions anhand der Indizes
+            glm::vec3 p0 = SpaceShipMesh.vertices[face.vertexIndices[0]];
+            glm::vec3 p1 = SpaceShipMesh.vertices[face.vertexIndices[i]];
+            glm::vec3 p2 = SpaceShipMesh.vertices[face.vertexIndices[i + 1]];
+
+            // Diese 3 Punkte bilden ein Dreieck zum zeichnen
+            vertices.push_back(p0);
+            vertices.push_back(p1);
+            vertices.push_back(p2);
+        }
+    }
+
+    hasNormals = SpaceShipMesh.hasNormals;
+    //Anzahl der Punkte zum zeichnen
     object->vertexCount = vertices.size();
 
-    // Mache für jeden Punkt eine Farbe, damit dein Shader glücklich ist
+    //Jeder Punkte bekommt eine Farbe
     std::vector<glm::vec3> colors(vertices.size(), modelColor);
 
     GLuint programId = program.getHandle();
@@ -369,10 +442,14 @@ void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
     glEnableVertexAttribArray(pos);
     glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-    // Wir brauchen hier keinen IndexBuffer!
-
     glBindVertexArray(0);
     object->model = glm::mat4(1.0f);
+    
+    // ZUSATZ-TIPP für die Normalen-Anforderung:
+    // Du solltest im 'Object'-Struct eine Variable 'bool hatNormalen;' hinzufügen,
+    // damit du sie hier für die spätere Tastaturabfrage speichern kannst:
+    // object->hatNormalen = SpaceShipMesh.hasNormals;
+
 }
 
 void renderBlenderModel(Object* object)
@@ -383,13 +460,21 @@ void renderBlenderModel(Object* object)
 
     glBindVertexArray(object->vao);
 
-    // Wenn du es als Drahtgittermodell sehen willst, entkommentiere die nächste Zeile:
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); 
-
-    // Wir nutzen hier glDrawArrays (weil keine Indices) und die gespeicherte vertexCount!
+    // Wir nutzen hier glDrawArrays weil gespeicherte vertexCount
     glDrawArrays(GL_TRIANGLES, 0, object->vertexCount);
 
     glBindVertexArray(0);
+}
+
+void renderNormalLines(Object* object)
+{
+  glm::mat4x4 mvp = projection * view * object->model;
+  program.use();
+  program.setUniform("mvp", mvp);
+
+  glBindVertexArray(object->vao);
+  glDrawArrays(GL_LINES, 0, object->vertexCount);
+  glBindVertexArray(0);
 }
 
 /*
@@ -438,6 +523,10 @@ bool init()
 
   initBlenderModel("3dModel/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
   
+  if(hasNormals){
+    initSpaceShipNormals(glm::vec3(1.0f, 0.0f, 0.0f), &SpaceShipNormals, SpaceShipMesh);
+  }
+
   return true;
 }
 
@@ -447,6 +536,7 @@ bool init()
 void render()
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
   glm::vec3 inclinedPlanetPosition = glm::vec3(glm::cos(glm::radians(phaseAngle)) * SMA, 0.0f, glm::sin(glm::radians(phaseAngle)) * SMA);
   inclinedPlanet.model = glm::translate(glm::mat4x4(1.0f), inclinedPlanetPosition);
@@ -490,24 +580,32 @@ void render()
 
   glm::vec3 shipPosition = glm::vec3(
       glm::cos(glm::radians(shipSpeed)) * shipOrbitRadius,
-      0.2f, // Y = 0.2f lässt das Schiff etwas "über" der Äquatorebene schweben
+      0.0f, // Y Position
       glm::sin(glm::radians(shipSpeed)) * shipOrbitRadius
   );
 
+  //Matrix zurücksetzen
   SpaceShip.model = glm::mat4x4(1.0f);
 
+  //Schiff neu positionieren
   SpaceShip.model = glm::translate(SpaceShip.model, shipPosition);
 
-  // B: Dann rotieren. Hier drehen wir das Schiff um seine eigene Y-Achse (Eigenrotation)
-  // Wenn dein Schiff vorwärts fliegen soll, musst du hier evtl. den Winkel anpassen
+  //Schiff auf der Bahn drehen
   SpaceShip.model = glm::rotate(SpaceShip.model, glm::radians(shipSpeed * -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-  // C: Am Schluss skalieren! Blender-Modelle brauchen oft extreme Werte. 
-  // Wenn es immer noch zu groß ist, probiere 0.005f. Wenn es weg ist, probiere 0.05f.
+  //Schiff um sich selbst drehen
+  SpaceShip.model = glm::rotate(SpaceShip.model, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  //Schiff kleiner machen
   SpaceShip.model = glm::scale(SpaceShip.model, glm::vec3(0.05f, 0.05f, 0.05f));
 
   // 4. Zeichnen
   renderBlenderModel(&SpaceShip);
+
+  if (showNormals && hasNormals){
+    SpaceShipNormals.model = SpaceShip.model;
+    renderNormalLines(&SpaceShipNormals);
+  }
 }
 
 void glutDisplay ()
@@ -569,6 +667,13 @@ void glutKeyboard (unsigned char keycode, int x, int y)
     } else {
       paused = false;
     }
+    break;
+  case 'n':
+    if(hasNormals == false){
+      std::cout << "hasNormals: " << hasNormals << std::endl;
+      break;
+    }
+    showNormals = !showNormals;
     break;
   }
   glutPostRedisplay();

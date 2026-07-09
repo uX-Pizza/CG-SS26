@@ -5,86 +5,93 @@
 #include <sstream>
 #include <glm/glm.hpp> 
 
-// ACHTUNG: Die Parameter für UVs müssen vec2 sein, nicht vec3!
-// Und ich habe es loadOBJ (großes J) genannt, damit dein Aufruf später funktioniert.
-bool loadOBJ(
-	const char* path,
-	std::vector<glm::vec3>& out_vertices,
-	std::vector<glm::vec2>& out_uvs,      // FEHLER BEHOBEN: Hier muss vec2 stehen
-	std::vector<glm::vec3>& out_normals
-) {
-	std::cout << "Lade Object: " << path << "\n";
+struct Vertex
+{
+	glm::vec3 position;
+	glm::vec3 normal;
+};
 
-	// FEHLER BEHOBEN: Tippfehler korrigiert
-	std::vector<glm::vec3> temp_vertices;
-	std::vector<glm::vec2> temp_uvs;      // FEHLER BEHOBEN: Hier muss vec2 stehen
-	std::vector<glm::vec3> temp_normals;
+struct Face
+{
+	std::vector<unsigned int> vertexIndices;
+	std::vector<unsigned int> normalIndices;
+};
 
-	// FEHLER BEHOBEN: Tippfehler korrigiert
-	std::vector<unsigned int> vertexIndices, uvIndices, normalIndices;
+struct EdgesList
+{
+	std::vector<glm::vec3> vertices;
+	std::vector<glm::vec3> normals;
+	std::vector<Face> faces;
+	bool hasNormals = false;
+};
 
-	// FEHLER BEHOBEN: Das Wichtigste! Wir müssen die Datei auch öffnen, 
-	// sonst existiert 'file' gar nicht.
-	std::ifstream file(path);
-	if (!file.is_open()) {
-		std::cerr << "Fehler: Konnte Datei nicht öffnen: " << path << "\n";
-		return false;
-	}
 
-	std::string lineHeader;
-	while (file >> lineHeader)
-	{
-		if (lineHeader == "v") {
-			glm::vec3 vertex;
-			file >> vertex.x >> vertex.y >> vertex.z;
-			temp_vertices.push_back(vertex);
-		}
-		else if (lineHeader == "vt") {
-			glm::vec2 uvs;
-			// FEHLER BEHOBEN: Hier stand uv.y statt uvs.y
-			file >> uvs.x >> uvs.y;
-			temp_uvs.push_back(uvs);
-		}
-		else if (lineHeader == "vn") {
-			// FEHLER BEHOBEN: Normalen sind vec3 (3D), nicht vec2!
-			glm::vec3 normals;
-			file >> normals.x >> normals.y >> normals.z;
-			// FEHLER BEHOBEN: Hier stand temp_uvs statt temp_normals
-			temp_normals.push_back(normals);
-		}
-		else if (lineHeader == "f") {
-			unsigned int vertexIndex[3], uvIndex[3], normalIndex[3];
 
-			char slash;
-			for (int i = 0; i < 3; i++) {
-				file >> vertexIndex[i] >> slash >> uvIndex[i] >> slash >> normalIndex[i];
+bool loadOBJ(const char* path, EdgesList& mesh) {
+    std::cout << "Lade Object: " << path << "\n";
 
-				vertexIndices.push_back(vertexIndex[i]);
-				uvIndices.push_back(uvIndex[i]);
-				normalIndices.push_back(normalIndex[i]);
-			}
-		}
-		else {
-			std::string stupidBuffer;
-			std::getline(file, stupidBuffer);
-		}
-	}
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        std::cerr << "Fehler: Konnte Datei nicht öffnen: " << path << "\n";
+        return false;
+    }
 
-	for (unsigned int i = 0; i < vertexIndices.size(); i++) {
-		unsigned int vertexIndex = vertexIndices[i];
-		unsigned int uvIndex = uvIndices[i];
-		unsigned int normalIndex = normalIndices[i];
+    std::string lineHeader;
+    while (file >> lineHeader) {
+        if (lineHeader == "v") {
+            glm::vec3 pos;
+            file >> pos.x >> pos.y >> pos.z;
+            mesh.vertices.push_back(pos); // Direkt ins Mesh schreiben
+        } 
+        else if (lineHeader == "vn") {
+            glm::vec3 norm;
+            file >> norm.x >> norm.y >> norm.z;
+            mesh.normals.push_back(norm);  // Direkt ins Mesh schreiben
+        }
+        else if (lineHeader == "f") {
+            std::string lineRest;
+            std::getline(file, lineRest);
+            std::stringstream ss(lineRest);
+            std::string token;
+            
+            Face currentFace;
+            
+            while (ss >> token) {
+                size_t slash1 = token.find('/');
+                unsigned int vIdx = 0;
+                unsigned int nIdx = 0;
+                
+                if (slash1 == std::string::npos) {
+                    vIdx = std::stoi(token);
+                } else {
+                    vIdx = std::stoi(token.substr(0, slash1));
+                    size_t slash2 = token.find('/', slash1 + 1);
+                    if (slash2 != std::string::npos) {
+                        std::string vnPart = token.substr(slash2 + 1);
+                        if (!vnPart.empty()) {
+                            nIdx = std::stoi(vnPart);
+                        }
+                    }
+                }
+                
+                currentFace.vertexIndices.push_back(vIdx - 1); // 1-basiert zu 0-basiert
+                if (nIdx > 0) {
+                    currentFace.normalIndices.push_back(nIdx - 1);
+                    mesh.hasNormals = true; // Sobald eine Normale da ist, wird es true
+                }
+            }
+            mesh.faces.push_back(currentFace);
+        }
+        else {
+            // Zeilen wie vt, g, o, s oder Kommentare ignorieren
+            std::string dummy;
+            std::getline(file, dummy);
+        }
+    }
 
-		glm::vec3 vertex = temp_vertices[vertexIndex - 1];
-		glm::vec2 uv = temp_uvs[uvIndex - 1];
-		glm::vec3 normal = temp_normals[normalIndex - 1];
-
-		out_vertices.push_back(vertex);
-		out_uvs.push_back(uv);
-		out_normals.push_back(normal);
-	}
-
-	file.close();
-	std::cout << "Erfolgreich geladen!" << std::endl;
-	return true;
+    file.close();
+    std::cout << "Erfolgreich geladen! " 
+              << mesh.vertices.size() << " Vertices, " 
+              << mesh.faces.size() << " Faces.\n";
+    return true;
 }
