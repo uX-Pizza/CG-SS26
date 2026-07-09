@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.10)
-project (Blatt03)
+project (Blatt04)
 
 # list of source files to compile
 set(sources main.cpp GLSLProgram.cpp)
@@ -31,10 +31,10 @@ include_directories(${PROJECT_SOURCE_DIR}/libs/glm)
 link_directories (${PROJECT_SOURCE_DIR}/libs/glew-glew-2.3.1/lib)
 link_directories (${PROJECT_SOURCE_DIR}/libs/freeglut-3.8.0/lib)
 
-# executable Blatt03
-add_executable (Blatt03 ${sources})
-# target_link_libraries(Blatt03 ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${GLEW_LIBRARIES} ${GLM_LIBRARIES} libglew32.lib freeglut_static.lib)
-target_link_libraries(Blatt03 ${OPENGL_LIBRARIES} libglut.a libglew.a)
+# executable Blatt04
+add_executable (Blatt04 ${sources})
+# target_link_libraries(Blatt04 ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${GLEW_LIBRARIES} ${GLM_LIBRARIES} libglew32.lib freeglut_static.lib)
+target_link_libraries(Blatt04 ${OPENGL_LIBRARIES} libglut.a libglew.a)
 # copy the shader directory relative to the executable
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shader
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

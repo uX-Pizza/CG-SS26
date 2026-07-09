@@ -38,6 +38,8 @@ float phaseAngle = 360.0f;
 float phaseAngleStep = 1.0f;
 bool paused = true;
 
+bool wireframe = false;
+
 
 /*
 Struct to hold data for object rendering.
@@ -91,7 +93,6 @@ void renderSphere(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_TRIANGLES, 1500, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
@@ -107,7 +108,6 @@ void renderLine(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDrawElements(GL_LINES, 2, GL_UNSIGNED_SHORT, 0);
   glBindVertexArray(0);
 }
@@ -377,7 +377,13 @@ bool init()
  */
 void render()
 {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  if (wireframe) {
+	  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	} else {
+	  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  }
 
   glm::vec3 inclinedPlanetPosition = glm::vec3(glm::cos(glm::radians(phaseAngle)) * SMA, 0.0f, glm::sin(glm::radians(phaseAngle)) * SMA);
   inclinedPlanet.model = glm::translate(glm::mat4x4(1.0f), inclinedPlanetPosition);
@@ -402,10 +408,10 @@ void render()
 
 
   // Render all objects
-	renderSphere(&sun);
+  renderSphere(&sun);
   renderLine(&sunAxis);
 
-	renderSphere(&inclinedPlanet);
+  renderSphere(&inclinedPlanet);
   renderLine(&inclinedPlanetAxis);
   renderSphere(&inclinedMoon);
 
@@ -474,6 +480,8 @@ void glutKeyboard (unsigned char keycode, int x, int y)
       paused = false;
     }
     break;
+  case 'w':
+	wireframe = !wireframe;
   }
   glutPostRedisplay();
 }
