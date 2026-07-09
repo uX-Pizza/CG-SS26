@@ -30,7 +30,7 @@ namespace cg
 			CubeSharp::initShader(programShaded, "shader/shadedPhong.vert", "shader/shadedPhong.frag");
 
 			programShaded.use();
-			programShaded.setUniform("light",  glm::vec3(0, 0, 0));
+			programShaded.setUniform("light",  glm::vec4(0, 0, 0, 0));
 			programShaded.setUniform("lightI", float(1.0f));
 			programShaded.setUniform("surfKa", glm::vec3(0.1f, 0.1f, 0.1f));
 			programShaded.setUniform("surfKd", glm::vec3(0.7f, 0.1f, 0.1f));

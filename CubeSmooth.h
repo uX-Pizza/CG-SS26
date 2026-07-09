@@ -26,11 +26,11 @@ namespace cg
 		void initShader()
 		{
 			CubeSmooth::initShader(programSimple, "shader/simple.vert", "shader/simple.frag");
-			//CubeSmooth::initShader(programShaded, "shader/shadedGouraud.vert", "shader/shadedGouraud.frag");
+			// CubeSmooth::initShader(programShaded, "shader/shadedGouraud.vert", "shader/shadedGouraud.frag");
 			CubeSmooth::initShader(programShaded, "shader/shadedPhong.vert", "shader/shadedPhong.frag");
 
 			programShaded.use();
-			programShaded.setUniform("light",  glm::vec3(0, 0, 0));
+			programShaded.setUniform("light",  glm::vec4(0, 0, 0, 0));
 			programShaded.setUniform("lightI", float(1.0f));
 			programShaded.setUniform("surfKa", glm::vec3(0.1f, 0.1f, 0.1f));
 			programShaded.setUniform("surfKd", glm::vec3(0.8f, 0.1f, 0.1f));
@@ -75,13 +75,13 @@ namespace cg
 			glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
 			// Color buffer.
-			glGenBuffers(1, &objCube.colorBuffer);
-			glBindBuffer(GL_ARRAY_BUFFER, objCube.colorBuffer);
-			glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
+			// glGenBuffers(1, &objCube.colorBuffer);
+			// glBindBuffer(GL_ARRAY_BUFFER, objCube.colorBuffer);
+			// glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec3), colors.data(), GL_STATIC_DRAW);
 
-			pos = glGetAttribLocation(programId, "color");
-			glEnableVertexAttribArray(pos);
-			glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+			// pos = glGetAttribLocation(programId, "color");
+			// glEnableVertexAttribArray(pos);
+			// glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
 			// Normal buffer.
 			glGenBuffers(1, &objCube.normalBuffer);

@@ -27,8 +27,8 @@ cg::AbstractCube* cubeRight  = nullptr;
 
 cg::AbstractCube* manipulate = nullptr;
 
-glm::mat4x4 view;
-glm::mat4x4 projection;
+glm::mat4x4 view(1.0f);
+glm::mat4x4 projection(1.0f);
 
 float zNear = 0.1f;
 float zFar = 100.0f;
@@ -200,10 +200,7 @@ int main(int argc, char** argv)
     glewExperimental = GL_TRUE;
     GLenum result = glewInit();
 
-	// while(glGetError() != GL_NO_ERROR) {}
-	std::cout << "after glew init: "
-			<< glGetError()
-			<< std::endl;
+	while(glGetError() != GL_NO_ERROR) {}
 
     if (result != GLEW_OK) {
        return -1;

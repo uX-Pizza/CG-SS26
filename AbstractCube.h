@@ -41,7 +41,7 @@ namespace cg
 			return renderNormals;
 		}
 	protected:
-		glm::mat4 model;
+		glm::mat4 model{1.0f};
 		bool renderNormals;
 	};
 }
