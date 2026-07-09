@@ -40,6 +40,10 @@ const float MOON_SMA = 0.5f;
 const float INCLINATION = 45.0f;
 const float NORMALS_LENGTH = 2.0f;
 
+float zoom = 4.0f;
+const unsigned short MAX_ZOOM = 7;
+const unsigned short MIN_ZOOM = 1;
+
 float phaseAngle = 360.0f;
 float phaseAngleStep = 1.0f;
 bool paused = true;
@@ -48,6 +52,7 @@ bool wireframe = false;
 bool shaded = false;
 bool normalsInitialized = false;
 bool showNormals = false;
+bool showBox = false;
 cg::GLSLProgram currentProgram;
 
 unsigned  lightIndex = 0;
@@ -114,6 +119,7 @@ Object inclinedMoon;
 
 Object SpaceShip;
 Object SpaceShipNormals;
+Object SpaceShipBox;
 
 
 void renderSphere(Object* object)
@@ -142,7 +148,7 @@ void renderSphere(Object* object)
   glBindVertexArray(0);
 }
 
-void renderLine(Object* object)
+void renderLines(Object* object)
 {
   // Create mvp.
   glm::mat4x4 mvp = projection * view * object->model;
@@ -153,7 +159,7 @@ void renderLine(Object* object)
 
   // Bind vertex array object
   glBindVertexArray(object->vao);
-  glDrawElements(GL_LINES, 2, GL_UNSIGNED_SHORT, 0);
+  glDrawArrays(GL_LINES, 0, object->vertexCount);
   glBindVertexArray(0);
 }
 
@@ -182,17 +188,6 @@ void renderBlenderModel(Object* object)
   // Bind vertex array object
   glBindVertexArray(object->vao);
   glDrawArrays(GL_TRIANGLES, 0, object->vertexCount);
-  glBindVertexArray(0);
-}
-
-void renderNormalLines(Object* object)
-{
-  glm::mat4x4 mvp = projection * view * object->model;
-  programSimple.use();
-  programSimple.setUniform("mvp", mvp);
-
-  glBindVertexArray(object->vao);
-  glDrawArrays(GL_LINES, 0, object->vertexCount);
   glBindVertexArray(0);
 }
 
@@ -334,6 +329,7 @@ void initTesselatedSphere(unsigned short n, float radius, glm::vec3 color, Objec
   }
 
 
+  object->vertexCount = vertices.size();
   // Sphere object
   GLuint programId = currentProgram.getHandle();
   GLuint pos;
@@ -387,6 +383,8 @@ void initLine(glm::vec3 p1, glm::vec3 p2, glm::vec3 color, Object* object)
   std::vector<glm::vec3> colors = {color, color};
   std::vector<GLushort> indices = {0, 1};
 
+  object->vertexCount = vertices.size();
+
   // Sphere object
   GLuint programId = programSimple.getHandle();
   GLuint pos;
@@ -422,7 +420,7 @@ void initLine(glm::vec3 p1, glm::vec3 p2, glm::vec3 color, Object* object)
   
   // Unbind vertex array object (back to default).
   glBindVertexArray(0);
-  
+
   object->model = glm::mat4(1.0f);
 }
 
@@ -565,6 +563,73 @@ void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
   glBindVertexArray(0);
   object->model = glm::mat4(1.0f);
 
+  //BoundingBox
+    if (!SpaceShipMesh.vertices.empty()) {
+        // Starte mit den Werten des allerersten Punktes
+        float minX = SpaceShipMesh.vertices[0].x, maxX = SpaceShipMesh.vertices[0].x;
+        float minY = SpaceShipMesh.vertices[0].y, maxY = SpaceShipMesh.vertices[0].y;
+        float minZ = SpaceShipMesh.vertices[0].z, maxZ = SpaceShipMesh.vertices[0].z;
+
+        // Durchlaufe alle Vertices, um die absoluten Minima und Maxima zu finden
+        for (const auto& v : SpaceShipMesh.vertices) {
+            if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+            if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+            if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
+        }
+
+        // Aus den 6 Werten bauen wir die 8 Eckpunkte der Box
+        glm::vec3 c0(minX, minY, minZ);
+        glm::vec3 c1(maxX, minY, minZ);
+        glm::vec3 c2(maxX, maxY, minZ);
+        glm::vec3 c3(minX, maxY, minZ);
+        glm::vec3 c4(minX, minY, maxZ);
+        glm::vec3 c5(maxX, minY, maxZ);
+        glm::vec3 c6(maxX, maxY, maxZ);
+        glm::vec3 c7(minX, maxY, maxZ);
+
+        // Jetzt definieren wir die 12 Kanten (Linien) der Box.
+        // Für GL_LINES brauchen wir immer Paare: Startpunkt, Endpunkt.
+        std::vector<glm::vec3> boxVertices = {
+            // Unterer Ring
+            c0, c1,  c1, c5,  c5, c4,  c4, c0,
+            // Oberer Ring
+            c3, c2,  c2, c6,  c6, c7,  c7, c3,
+            // Vertikale Säulen, die oben und unten verbinden
+            c0, c3,  c1, c2,  c5, c6,  c4, c7
+        };
+
+        // Weise dem Box-Objekt die Anzahl der Punkte zu (12 Linien * 2 Punkte = 24)
+        SpaceShipBox.vertexCount = boxVertices.size();
+
+        // Farbe für die Bounding Box
+        std::vector<glm::vec3> boxColors(boxVertices.size(), glm::vec3(1.0f, 0.0f, 0.0f));
+
+		programId = programSimple.getHandle();
+
+        // OpenGL-Buffer für die Box erstellen
+        glGenVertexArrays(1, &SpaceShipBox.vao);
+        glBindVertexArray(SpaceShipBox.vao);
+
+        // Positions-Buffer
+        glGenBuffers(1, &SpaceShipBox.positionBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, SpaceShipBox.positionBuffer);
+        glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(glm::vec3), boxVertices.data(), GL_STATIC_DRAW);
+        pos = glGetAttribLocation(programId, "position");
+        glEnableVertexAttribArray(pos);
+        glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+        // Farben-Buffer
+        glGenBuffers(1, &SpaceShipBox.colorBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, SpaceShipBox.colorBuffer);
+        glBufferData(GL_ARRAY_BUFFER, boxColors.size() * sizeof(glm::vec3), boxColors.data(), GL_STATIC_DRAW);
+        pos = glGetAttribLocation(programId, "color");
+        glEnableVertexAttribArray(pos);
+        glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+        glBindVertexArray(0);
+        SpaceShipBox.model = glm::mat4(1.0f);
+    }
+
   if (SpaceShipMesh.hasNormals) {
     initSpaceShipNormals(glm::vec3(1.0f, 0.0f, 0.0f), &SpaceShipNormals, SpaceShipMesh);
   }
@@ -706,14 +771,14 @@ void render()
 
   // Render all objects
   renderSphere(&sun);
-  renderLine(&sunAxis);
+  renderLines(&sunAxis);
 
   renderSphere(&inclinedPlanet);
-  renderLine(&inclinedPlanetAxis);
+  renderLines(&inclinedPlanetAxis);
   renderSphere(&inclinedMoon);
 
   renderSphere(&planet);
-  renderLine(&planetAxis);
+  renderLines(&planetAxis);
   renderSphere(&moon);
 
   //SpaceShip
@@ -747,7 +812,12 @@ void render()
 
   if (showNormals && normalsInitialized){
     SpaceShipNormals.model = SpaceShip.model;
-    renderNormalLines(&SpaceShipNormals);
+    renderLines(&SpaceShipNormals);
+  }
+
+  if (showBox == true){
+    SpaceShipBox.model = SpaceShip.model;
+    renderLines(&SpaceShipBox);
   }
 }
 
@@ -786,6 +856,10 @@ void glutResize (int width, int height)
  */
 void glutKeyboard (unsigned char keycode, int x, int y)
 {
+  glm::vec3 eye(0.0f, 0.0f, zoom);
+  glm::vec3 center(0.0f, 0.0f, 0.0f);
+  glm::vec3 up(0.0f, 1.0f, 0.0f);
+
   switch (keycode) {
   case 27: // ESC
     glutDestroyWindow ( glutID );
@@ -833,6 +907,24 @@ void glutKeyboard (unsigned char keycode, int x, int y)
 	break;
   case 'n':
 	showNormals = !showNormals;
+	break;
+  case 'b':
+    showBox = !showBox;
+	break;
+  case '+':
+    if (zoom > MIN_ZOOM) {
+      eye[2] -= 1;
+      zoom -= 1;
+      view = glm::lookAt(eye, center, up);
+    }
+    break;
+  case '-':
+    if (zoom < MAX_ZOOM) {
+      eye[2] += 1;
+      zoom += 1;
+      view = glm::lookAt(eye, center, up);
+    }
+    break;
   }
   glutPostRedisplay();
 }
