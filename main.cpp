@@ -12,6 +12,8 @@
 #include "GLSLProgram.h"
 #include "GLTools.h"
 
+#include "obj_loader.h"
+
 // Standard window width
 const int WINDOW_WIDTH  = 640;
 // Standard window height
@@ -65,6 +67,8 @@ public:
   GLuint colorBuffer;    // ID of vertex-buffer: color
   
   GLuint indexBuffer;    // ID of index-buffer
+
+  int vertexCount = 0; //Vertex Count für das einlesen des Models
   
   glm::mat4x4 model; // model matrix
 };
@@ -79,6 +83,7 @@ Object moon;
 Object inclinedPlanet;
 Object inclinedPlanetAxis;
 Object inclinedMoon;
+Object SpaceShip;
 
 void renderSphere(Object* object)
 {
@@ -431,7 +436,7 @@ bool init()
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), &planetAxis);
   initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &moon);
 
-  initBlenderModel("C:/Users/micha/Documents/Uni/ComputerGrafik/Beleuchtung_UB05/3dModel/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
+  initBlenderModel("../../3dModel/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
   
   return true;
 }
