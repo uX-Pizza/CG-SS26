@@ -101,6 +101,8 @@ public:
   glm::vec3 surfKs;
   float surfShininess;
 
+  std::vector<glm::vec3> localVertices;
+
   int vertexCount;
   
   glm::mat4x4 model; // model matrix
@@ -121,6 +123,105 @@ Object SpaceShip;
 Object SpaceShipNormals;
 Object SpaceShipBox;
 
+
+std::vector<glm::vec3> getWorldVertices(const Object& object)
+{
+    std::vector<glm::vec3> worldVertices;
+    worldVertices.reserve(object.localVertices.size());
+
+    for (const glm::vec3& v : object.localVertices)
+    {
+        glm::vec4 world =
+            object.model * glm::vec4(v, 1.0f);
+
+        worldVertices.emplace_back(world.x, world.y, world.z);
+    }
+
+    return worldVertices;
+}
+
+void updateWorldBoundingBox(Object* object, Object* boxObject, glm::vec3 color)
+{
+    std::vector<glm::vec3> worldVertices = getWorldVertices(*object);
+
+    if (worldVertices.empty())
+        return;
+
+    float minX = worldVertices[0].x;
+    float maxX = worldVertices[0].x;
+    float minY = worldVertices[0].y;
+    float maxY = worldVertices[0].y;
+    float minZ = worldVertices[0].z;
+    float maxZ = worldVertices[0].z;
+
+    for (const glm::vec3& v : worldVertices)
+    {
+        minX = glm::min(minX, v.x);
+        maxX = glm::max(maxX, v.x);
+
+        minY = glm::min(minY, v.y);
+        maxY = glm::max(maxY, v.y);
+
+        minZ = glm::min(minZ, v.z);
+        maxZ = glm::max(maxZ, v.z);
+    }
+
+    glm::vec3 c0(minX, minY, minZ);
+    glm::vec3 c1(maxX, minY, minZ);
+    glm::vec3 c2(maxX, maxY, minZ);
+    glm::vec3 c3(minX, maxY, minZ);
+
+    glm::vec3 c4(minX, minY, maxZ);
+    glm::vec3 c5(maxX, minY, maxZ);
+    glm::vec3 c6(maxX, maxY, maxZ);
+    glm::vec3 c7(minX, maxY, maxZ);
+
+
+    std::vector<glm::vec3> vertices =
+    {
+        // untere Fläche
+        c0,c1,
+        c1,c5,
+        c5,c4,
+        c4,c0,
+
+        // obere Fläche
+        c3,c2,
+        c2,c6,
+        c6,c7,
+        c7,c3,
+
+        // Verbindungen
+        c0,c3,
+        c1,c2,
+        c5,c6,
+        c4,c7
+    };
+
+
+    // Position aktualisieren
+    glBindBuffer(GL_ARRAY_BUFFER, boxObject->positionBuffer);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        vertices.size() * sizeof(glm::vec3),
+        vertices.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+	std::vector<glm::vec3> colors(vertices.size(), color);
+
+	// Farben aktualisieren
+    glBindBuffer(GL_ARRAY_BUFFER, boxObject->colorBuffer);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        colors.size() * sizeof(glm::vec3),
+        colors.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+    boxObject->vertexCount = vertices.size();
+    boxObject->model = glm::mat4(1.0f);
+}
 
 void renderSphere(Object* object)
 {
@@ -526,6 +627,7 @@ void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
   // hasNormals = SpaceShipMesh.hasNormals;
   //Anzahl der Punkte zum zeichnen
   object->vertexCount = vertices.size();
+  object->localVertices = vertices;
 
   //Jeder Punkte bekommt eine Farbe
   std::vector<glm::vec3> colors(vertices.size(), modelColor);
@@ -562,73 +664,6 @@ void initBlenderModel(const char* path, glm::vec3 modelColor, Object* object)
 
   glBindVertexArray(0);
   object->model = glm::mat4(1.0f);
-
-  //BoundingBox
-    if (!SpaceShipMesh.vertices.empty()) {
-        // Starte mit den Werten des allerersten Punktes
-        float minX = SpaceShipMesh.vertices[0].x, maxX = SpaceShipMesh.vertices[0].x;
-        float minY = SpaceShipMesh.vertices[0].y, maxY = SpaceShipMesh.vertices[0].y;
-        float minZ = SpaceShipMesh.vertices[0].z, maxZ = SpaceShipMesh.vertices[0].z;
-
-        // Durchlaufe alle Vertices, um die absoluten Minima und Maxima zu finden
-        for (const auto& v : SpaceShipMesh.vertices) {
-            if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
-            if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
-            if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
-        }
-
-        // Aus den 6 Werten bauen wir die 8 Eckpunkte der Box
-        glm::vec3 c0(minX, minY, minZ);
-        glm::vec3 c1(maxX, minY, minZ);
-        glm::vec3 c2(maxX, maxY, minZ);
-        glm::vec3 c3(minX, maxY, minZ);
-        glm::vec3 c4(minX, minY, maxZ);
-        glm::vec3 c5(maxX, minY, maxZ);
-        glm::vec3 c6(maxX, maxY, maxZ);
-        glm::vec3 c7(minX, maxY, maxZ);
-
-        // Jetzt definieren wir die 12 Kanten (Linien) der Box.
-        // Für GL_LINES brauchen wir immer Paare: Startpunkt, Endpunkt.
-        std::vector<glm::vec3> boxVertices = {
-            // Unterer Ring
-            c0, c1,  c1, c5,  c5, c4,  c4, c0,
-            // Oberer Ring
-            c3, c2,  c2, c6,  c6, c7,  c7, c3,
-            // Vertikale Säulen, die oben und unten verbinden
-            c0, c3,  c1, c2,  c5, c6,  c4, c7
-        };
-
-        // Weise dem Box-Objekt die Anzahl der Punkte zu (12 Linien * 2 Punkte = 24)
-        SpaceShipBox.vertexCount = boxVertices.size();
-
-        // Farbe für die Bounding Box
-        std::vector<glm::vec3> boxColors(boxVertices.size(), glm::vec3(1.0f, 0.0f, 0.0f));
-
-		programId = programSimple.getHandle();
-
-        // OpenGL-Buffer für die Box erstellen
-        glGenVertexArrays(1, &SpaceShipBox.vao);
-        glBindVertexArray(SpaceShipBox.vao);
-
-        // Positions-Buffer
-        glGenBuffers(1, &SpaceShipBox.positionBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, SpaceShipBox.positionBuffer);
-        glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(glm::vec3), boxVertices.data(), GL_STATIC_DRAW);
-        pos = glGetAttribLocation(programId, "position");
-        glEnableVertexAttribArray(pos);
-        glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-        // Farben-Buffer
-        glGenBuffers(1, &SpaceShipBox.colorBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, SpaceShipBox.colorBuffer);
-        glBufferData(GL_ARRAY_BUFFER, boxColors.size() * sizeof(glm::vec3), boxColors.data(), GL_STATIC_DRAW);
-        pos = glGetAttribLocation(programId, "color");
-        glEnableVertexAttribArray(pos);
-        glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-        glBindVertexArray(0);
-        SpaceShipBox.model = glm::mat4(1.0f);
-    }
 
   if (SpaceShipMesh.hasNormals) {
     initSpaceShipNormals(glm::vec3(1.0f, 0.0f, 0.0f), &SpaceShipNormals, SpaceShipMesh);
@@ -728,7 +763,12 @@ bool init()
   initLine(glm::vec3(0.0f, AXIS_LENGTH, 0.0f), glm::vec3(0.0f, -AXIS_LENGTH, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), &planetAxis);
   initTesselatedSphere(n, 0.07f, glm::vec3(0.5f, 0.5f, 0.5f), &moon, glm::vec3(0.1f, 0.1f, 0.1f), glm::vec3(0.8f, 0.8f, 0.8f), glm::vec3(0.5f,0.5f,0.5f), 10.0f);
 
-  initBlenderModel("objects/triangulated-CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
+  initLine(glm::vec3(0),
+         glm::vec3(0),
+         glm::vec3(0,0,0),
+         &SpaceShipBox);
+
+  initBlenderModel("objects/smooth3-CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
   //initBlenderModel("objects/CG-Model.obj", glm::vec3(0.0f, 1.0f, 0.0f), &SpaceShip);
 
   return true;
@@ -816,8 +856,9 @@ void render()
   }
 
   if (showBox == true){
-    SpaceShipBox.model = SpaceShip.model;
-    renderLines(&SpaceShipBox);
+    //SpaceShipBox.model = SpaceShip.model;
+	updateWorldBoundingBox(&SpaceShip, &SpaceShipBox, glm::vec3(1.0f, 0.0f, 0.0f));
+	renderLines(&SpaceShipBox);
   }
 }
 
@@ -942,7 +983,7 @@ int main(int argc, char** argv)
   glutInitContextFlags  (GLUT_FORWARD_COMPATIBLE | GLUT_DEBUG);
   glutInitDisplayMode   (GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
   
-  glutCreateWindow("Aufgabenblatt 03");
+  glutCreateWindow("Aufgabenblatt 04");
   glutID = glutGetWindow();
   
   // GLEW: Load opengl extensions
